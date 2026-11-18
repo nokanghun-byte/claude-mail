@@ -1,0 +1,3086 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email</title>
+<style>
+/* 레이아웃: 메일 웹처럼 세 칸. 왼쪽 계정·분류, 가운데 목록, 오른쪽 읽기 창. 좁은 화면에서는 목록과 읽기 창을 번갈아 보여 준다. */
+:root{
+  --bg:#F2F4F6;
+  --surface:#FFFFFF;
+  --surface2:#F9FAFB;
+  --ink:#191F28;
+  --ink2:#333D4B;
+  --muted:#6B7684;
+  --faint:#8B95A1;
+  --line:#E5E8EB;
+  --accent:#3182F6;
+  --accent-ink:#FFFFFF;
+  --accent-soft:#E8F3FF;
+  --danger:#F04452;
+  --danger-soft:#FFEEEE;
+  --ok:#00A661;
+  --act:#3182F6;
+  --bill:#00A661;
+  --news:#7B61FF;
+  --ad:#8B95A1;
+  --font:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101013;
+    --surface:#1B1C21;
+    --surface2:#222329;
+    --ink:#F2F4F6;
+    --ink2:#D1D6DB;
+    --muted:#9EA4AE;
+    --faint:#7E858F;
+    --line:#2C2E35;
+    --accent:#4C9AFF;
+    --accent-ink:#0B1220;
+    --accent-soft:#18283F;
+    --danger:#FF6B76;
+    --danger-soft:#3A1E22;
+    --ok:#2FCB86;
+    --act:#4C9AFF;
+    --bill:#2FCB86;
+    --news:#9C88FF;
+    --ad:#7E858F;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101013;
+  --surface:#1B1C21;
+  --surface2:#222329;
+  --ink:#F2F4F6;
+  --ink2:#D1D6DB;
+  --muted:#9EA4AE;
+  --faint:#7E858F;
+  --line:#2C2E35;
+  --accent:#4C9AFF;
+  --accent-ink:#0B1220;
+  --accent-soft:#18283F;
+  --danger:#FF6B76;
+  --danger-soft:#3A1E22;
+  --ok:#2FCB86;
+  --act:#4C9AFF;
+  --bill:#2FCB86;
+  --news:#9C88FF;
+  --ad:#7E858F;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%;letter-spacing:-0.01em}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+a{color:inherit}
+
+/* 세 칸 틀 */
+.app{display:grid;grid-template-columns:236px minmax(320px,400px) minmax(0,1fr);height:100vh;height:100dvh}
+.side,.listpane,.readpane{min-height:0;overflow:auto}
+.side{padding:24px 14px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
+.listpane{background:var(--surface);border-left:1px solid var(--line);border-right:1px solid var(--line);display:flex;flex-direction:column}
+.readpane{background:var(--bg)}
+
+/* 왼쪽: 계정·분류 */
+.brand{font-size:22px;font-weight:700;padding:0 10px 14px;letter-spacing:-0.02em}
+.side-h{font-size:13px;font-weight:600;color:var(--faint);padding:16px 10px 6px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.navbtn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:12px;font-size:15px;font-weight:500;color:var(--ink2);text-align:left}
+.navbtn:hover{background:var(--surface2)}
+.navbtn[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:0 1px 3px rgba(0,27,55,.06)}
+.navbtn .dot{width:8px;height:8px;border-radius:50%;background:var(--c,var(--faint));flex:none}
+.navbtn .ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:13px;font-weight:700;color:#FFFFFF;background:var(--c);flex:none}
+.navbtn .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.navbtn .num{font-size:13px;font-weight:600;color:var(--faint);font-variant-numeric:tabular-nums}
+.navbtn .num.on{color:var(--accent)}
+.side-foot{margin:auto 10px 0;padding-top:18px;font-size:12px;line-height:1.55;color:var(--faint)}
+.side-foot a{color:inherit}
+
+/* 가운데: 목록 */
+.lhead{position:sticky;top:0;z-index:2;background:var(--surface);padding:22px 20px 12px;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid var(--line)}
+.lrow{display:flex;align-items:center;gap:10px}
+.lrow h1{flex:1;margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em}
+.lrow2{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.fresh{font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.iconbtn{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--muted)}
+.iconbtn:hover{background:var(--surface2);color:var(--ink)}
+.iconbtn[disabled]{opacity:.4;cursor:default}
+.iconbtn svg{width:20px;height:20px}
+.seg{display:inline-flex;background:var(--surface2);border-radius:10px;padding:3px;gap:2px}
+.seg button{border-radius:8px;padding:6px 12px;font-size:13.5px;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,27,55,.08)}
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;user-select:none}
+.switch input{appearance:none;-webkit-appearance:none;width:34px;height:20px;border-radius:999px;background:var(--line);position:relative;margin:0;cursor:pointer;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
+.switch input:checked{background:var(--accent)}
+.switch input:checked::after{transform:translateX(14px)}
+#notice{display:flex;flex-direction:column;gap:8px;padding:0 12px}
+#notice:not(:empty){padding-top:12px}
+.note{background:var(--surface2);border-radius:12px;padding:12px 14px;font-size:13.5px;color:var(--ink2);display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.note.err{background:var(--danger-soft)}
+.note strong{font-weight:700;width:100%}
+.mlist{list-style:none;margin:0;padding:6px 8px 24px}
+.mrow{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;width:100%;padding:12px;border-radius:14px;text-align:left}
+.mrow:hover{background:var(--surface2)}
+.mrow[aria-current="true"]{background:var(--accent-soft)}
+.av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:15px;font-weight:700;color:#FFFFFF;background:var(--c)}
+.mmain{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mtop{display:flex;align-items:baseline;gap:8px;min-width:0}
+.mfrom{flex:1;min-width:0;font-size:14px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mtime{flex:none;font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.msubj{font-size:15px;font-weight:500;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msnip{font-size:13.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.unread .mfrom{color:var(--ink);font-weight:700}
+.unread .msubj{color:var(--ink);font-weight:700}
+.udot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent);align-self:center}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.tag{font-size:12px;font-weight:600;border-radius:6px;padding:1px 7px;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.tag.cat{color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.tag.work{color:var(--accent);background:var(--accent-soft)}
+.tag.read{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.tag.wait{color:var(--muted)}
+.tag.fail{color:var(--danger);background:var(--danger-soft)}
+.empty{padding:48px 20px;text-align:center;color:var(--faint);font-size:14px}
+.skel{height:64px;margin:8px 12px;border-radius:14px;background:linear-gradient(90deg,var(--surface2),var(--line),var(--surface2));background-size:200% 100%;animation:sh 1.3s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion: reduce){.skel{animation:none}}
+
+/* 오른쪽: 읽기 창 */
+.reader{max-width:920px;margin:0 auto;padding:24px 28px 56px;display:flex;flex-direction:column;gap:14px}
+.rtop{display:flex;align-items:center;gap:6px}
+.back{display:none}
+.rsubj{margin:4px 0 0;font-size:24px;font-weight:700;line-height:1.35;letter-spacing:-0.02em;overflow-wrap:anywhere}
+.rmeta{display:flex;align-items:center;gap:12px}
+.rmeta .who{display:flex;flex-direction:column;min-width:0}
+.rmeta .nm{font-weight:700;font-size:15px}
+.rmeta .dt{font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums}
+.tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;border-radius:10px;padding:8px 14px;font-size:14px;font-weight:600;background:var(--surface);color:var(--ink2);border:1px solid var(--line);text-decoration:none}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(.95)}
+.btn.danger{color:var(--danger)}
+.btn.danger.solid{background:var(--danger);color:#FFFFFF;border-color:var(--danger)}
+.btn[disabled]{opacity:.5;cursor:default}
+.status{font-size:13.5px;color:var(--muted)}
+.status.ok{color:var(--ok);font-weight:600}
+.status.bad{color:var(--danger)}
+.confirm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--danger-soft);border-radius:12px;padding:10px 12px;font-size:14px}
+
+.writebtn{width:100%;justify-content:center;padding:11px 14px;font-size:15px;margin:0 0 14px;border-radius:12px}
+.writesm{padding:6px 12px;font-size:13.5px}
+@media (min-width:1101px){.writesm{display:none}}
+@media (max-width:1100px){.writebtn{display:none}}
+
+.searchbox{display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:12px;padding:0 6px 0 12px;height:40px}
+.searchbox svg{width:18px;height:18px;color:var(--faint);flex:none}
+.searchbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:inherit;font-size:14.5px;outline:none;height:100%}
+.searchbox input::-webkit-search-cancel-button{display:none}
+.searchbox:focus-within{outline:2px solid var(--accent);outline-offset:-2px}
+.tag.acct{color:#FFFFFF;background:var(--c)}
+
+.tools.sub{gap:6px}
+.tools.sub .btn{padding:6px 11px;font-size:13px}
+.btn.staron{color:#F5A623;border-color:#F5A623}
+.btn.ai{color:var(--news);border-color:color-mix(in srgb,var(--news) 40%,var(--line))}
+.star{flex:none;font-size:13px;color:#F5A623}
+.aicard{background:color-mix(in srgb,var(--news) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--news) 30%,var(--line));border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.aicard b{font-size:13px;color:var(--news)}
+.aitext{white-space:pre-wrap;font-size:14.5px;line-height:1.65;color:var(--ink2)}
+.airow{display:flex;gap:8px}
+.airow input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;padding:8px 12px}
+.avwrap{position:relative;width:40px;height:40px}
+.avwrap .pick{position:absolute;inset:0;display:none;place-items:center;background:var(--surface);border-radius:50%;cursor:pointer}
+.avwrap .pick input{width:18px;height:18px;accent-color:var(--accent);margin:0;cursor:pointer}
+.mrow:hover .pick,.mrow.picked .pick,.mrow:focus-within .pick{display:grid}
+.mrow{cursor:pointer}
+.mrow.picked{background:var(--accent-soft)}
+.mrow.cursor{box-shadow:inset 3px 0 0 var(--accent)}
+.bulkbar{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 12px 0;padding:8px 10px;border-radius:12px;background:var(--ink);color:var(--surface)}
+.bulkbar b{margin-right:4px;font-size:14px}
+.bulkbar .btn{padding:5px 10px;font-size:13px}
+.picklist{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
+.pickitem{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface)}
+.pickitem:hover{background:var(--surface2)}
+.pickitem b{font-size:14.5px}
+.pickitem span{font-size:12.5px;color:var(--faint)}
+.pickitem.todo.high b{color:var(--danger)}
+.keyrow{display:flex;align-items:center;gap:12px;padding:4px 0;font-size:14px}
+.keyrow kbd{min-width:96px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;text-align:center}
+@media (max-width:720px){#helpBtn{display:none}}
+
+.confirmwin{width:min(420px,100%)}
+.askmsg{margin:0 0 6px;font-size:15px;line-height:1.6;color:var(--ink2);overflow-wrap:anywhere}
+
+.trcard{background:color-mix(in srgb,var(--accent) 7%,var(--surface));border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
+.trcard b{color:var(--accent)}
+.mlist li.swipe{position:relative;border-radius:14px;overflow:hidden}
+.swipebg{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:24px;background:var(--danger);color:#FFFFFF;font-weight:700;font-size:15px;border-radius:14px;opacity:0;transition:opacity .15s}
+.mlist li.swiping .swipebg{opacity:1}
+.mlist li.armed .swipebg{filter:brightness(.88)}
+.mlist li.swipe .mrow{position:relative;background:var(--surface);touch-action:pan-y}
+.mlist li.swipe .mrow:hover{background:var(--surface2)}
+.mlist li.swipe .mrow[aria-current="true"],.mlist li.swipe .mrow.picked{background:var(--accent-soft)}
+
+.trlink{display:inline-block;font-size:12.5px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:0 6px;margin:0 2px;text-decoration:none}
+.trlink:hover{text-decoration:underline}
+
+.driveitem{flex-direction:row;align-items:center;gap:10px}
+.driveitem .fx{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:10.5px;font-weight:800;color:#FFFFFF;background:var(--c);flex:none}
+.driveitem .dtx{display:flex;flex-direction:column;min-width:0}
+.driveitem .dtx b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.fchip.toobig{background:color-mix(in srgb,var(--danger) 10%,var(--surface2))}
+.fchip.toobig em{color:var(--danger)}
+.gmailweb{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;background:var(--surface2);border-radius:12px;padding:10px 12px;font-size:13.5px;color:var(--ink2)}
+
+/* 새 메일 알림 */
+.toasts{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px))}
+.toast{display:flex;align-items:flex-start;gap:12px;background:var(--surface);color:var(--ink);border-radius:18px;padding:14px 12px 14px 14px;box-shadow:0 12px 32px rgba(0,12,30,.18);cursor:pointer;animation:tin .25s ease-out;border:1px solid var(--line)}
+.toast:hover{background:var(--surface2)}
+.toast.out{opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s}
+.toast .tbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.toast .tk{font-size:12px;font-weight:700;color:var(--accent)}
+.toast b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast .ts{font-size:13.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast .iconbtn{width:28px;height:28px}
+.tic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:800;color:#FFFFFF;background:var(--c);flex:none}
+@keyframes tin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.toast{animation:none}}
+@media (max-width:720px){.toasts{right:16px;left:16px;bottom:12px;width:auto}}
+
+/* 팝업 창 */
+.overlay{position:fixed;inset:0;z-index:50;background:rgba(0,12,30,.45);display:grid;place-items:center;padding:16px}
+.modal{position:relative;width:min(720px,100%);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;background:var(--surface);border-radius:20px;box-shadow:0 20px 60px rgba(0,12,30,.3);overflow:hidden}
+.mhead{display:flex;align-items:center;gap:8px;padding:16px 18px 10px}
+.mhead b{flex:1;font-size:18px;font-weight:700}
+.mbody{padding:0 18px 18px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.composewin{width:min(780px,100%)}
+.drophint{display:none;position:absolute;inset:8px;border:2px dashed var(--accent);border-radius:16px;background:color-mix(in srgb,var(--accent-soft) 88%,transparent);color:var(--accent);font-size:17px;font-weight:700;place-items:center;pointer-events:none}
+.composewin.dropping .drophint{display:grid}
+.cfield.ro b{font-weight:600;font-size:14.5px;overflow-wrap:anywhere}
+.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--accent);margin:0}
+.sugwrap{position:relative;flex:1;min-width:0;display:flex}
+.sugwrap input{flex:1}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:5;margin:4px 0 0;padding:6px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,12,30,.14);max-height:280px;overflow:auto}
+.sug li{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer}
+.sug li:hover,.sug li.on{background:var(--accent-soft)}
+.sug .st{display:flex;flex-direction:column;min-width:0}
+.sug .st b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sug .st span{font-size:12.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av.sm{width:28px;height:28px;font-size:12px}
+.dropzone{border:2px dashed var(--line);border-radius:14px;padding:22px 16px;text-align:center;color:var(--muted);font-size:14px;cursor:pointer}
+.dropzone:hover,.dropzone.over{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.cardprev{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.cardprev img{max-width:360px;width:100%;border:1px solid var(--line);border-radius:10px;background:#FFFFFF}
+.sigbtn{margin-top:10px}
+@media (max-width:720px){ .sigbtn{display:none} .overlay{padding:0;place-items:end stretch} .modal{border-radius:20px 20px 0 0;max-height:94dvh;width:100%} }
+.compose{display:flex;flex-direction:column;gap:10px;border:1.5px solid var(--accent)}
+.compose .confirm{background:var(--accent-soft)}
+.chead{display:flex;align-items:center;gap:8px}
+.chead b{flex:1;font-size:16px}
+.cfield{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:4px 0}
+.cfield span{flex:none;width:68px;font-size:13.5px;color:var(--muted)}
+.cfield input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:inherit;font-size:14.5px;padding:6px 0;outline:none}
+.cnote{font-size:13px;color:var(--muted)}
+.cbody,.csigbox{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--surface2);color:var(--ink);font:inherit;font-size:15px;line-height:1.6;padding:12px 14px;resize:vertical}
+.csigbox{font-size:13.5px}
+.cbody:focus,.csigbox:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.csig{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:14px;color:var(--ink2)}
+.csig input{width:16px;height:16px;accent-color:var(--accent);margin:0}
+.linkbtn{color:var(--accent);font-size:13.5px;font-weight:600}
+.cfiles{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fchip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border-radius:8px;padding:4px 6px 4px 10px;font-size:13px;max-width:100%}
+.fchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fchip.drive{background:var(--accent-soft)}
+.fchip em{font-style:normal;font-size:11.5px;font-weight:700;color:var(--accent)}
+.driverow{display:flex;flex-direction:column;gap:6px;background:var(--surface2);border-radius:12px;padding:10px 12px}
+.sharesel{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;padding:6px 8px}
+.fchip button{width:20px;height:20px;border-radius:6px;color:var(--muted)}
+.fchip button:hover{background:var(--line)}
+.cfoot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.cstatus{font-size:13.5px;color:var(--muted)}
+.cstatus:empty{display:none}
+.cstatus.bad{color:var(--danger)}
+.card{background:var(--surface);border-radius:20px;padding:6px;box-shadow:0 1px 3px rgba(0,27,55,.05)}
+.card.pad{padding:18px 20px}
+.msgsep{font-size:13px;color:var(--faint);padding:10px 14px 4px}
+.body{font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:14px;font-family:inherit;color:var(--ink2)}
+.mailframe{display:block;width:100%;min-height:120px;border:0;border-radius:16px;background:#FFFFFF;color-scheme:light}
+.sec-h{font-size:15px;font-weight:700;margin:8px 2px 0}
+.files{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.file{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--surface);border:1px solid var(--line);text-align:left;min-width:0}
+.file:hover{background:var(--surface2)}
+.file[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.file .fx{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:10.5px;font-weight:800;color:#FFFFFF;background:var(--c);flex:none;text-transform:uppercase}
+.file .fn{display:flex;flex-direction:column;min-width:0}
+.file .fn b{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .fn span{font-size:12px;color:var(--faint)}
+.attview{background:var(--surface);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.attview .vh{display:flex;align-items:center;gap:8px;width:100%}
+.attview .vh b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attbody{width:100%;display:flex;flex-direction:column;gap:8px}
+.attview img{max-width:100%;height:auto;border-radius:8px;background:#FFFFFF}
+.attview pre{margin:0;max-height:60vh;overflow:auto;white-space:pre-wrap;font-family:inherit;font-size:13.5px;width:100%;background:var(--surface2);border-radius:10px;padding:12px}
+.cap{font-size:12.5px;color:var(--faint);overflow-wrap:anywhere}
+.cap.bad{color:var(--danger)}
+.ghost{height:100%;display:grid;place-items:center;color:var(--faint);font-size:15px;text-align:center;padding:24px}
+.ghost svg{width:56px;height:56px;margin:0 auto 10px;display:block;opacity:.5}
+
+/* 중간 폭: 목록과 읽기 창을 번갈아 */
+@media (max-width:1100px){
+  .app{grid-template-columns:212px minmax(0,1fr)}
+  .app .readpane{grid-column:2}
+  .app.reading .listpane{display:none}
+  .app:not(.reading) .readpane{display:none}
+  .back{display:grid}
+}
+/* 휴대폰 폭: 왼쪽 칸을 위쪽 가로 줄로 */
+@media (max-width:720px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:auto;min-height:100dvh}
+  .side{flex-direction:column;padding:14px 16px 6px;gap:8px;overflow:visible}
+  .brand{display:none}
+  .side-h,.side-foot{display:none}
+  .nav{flex-direction:row;gap:6px;overflow-x:auto;scrollbar-width:none}
+  .navbtn{width:auto;flex:none;padding:7px 12px;border-radius:999px;font-size:14px;background:var(--surface);border:1px solid var(--line)}
+  .navbtn[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink);box-shadow:none}
+  .navbtn[aria-pressed="true"] .num{color:inherit;opacity:.8}
+  .navbtn .ic{display:none}
+  .app .listpane,.app .readpane{grid-column:1;border:0;overflow:visible}
+  .lhead{padding:14px 16px 10px}
+  .reader{padding:12px 16px 48px}
+  .rsubj{font-size:20px}
+  .mrow{padding:12px 8px}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="side" aria-label="메일함">
+    <div class="brand">메일</div>
+    <button type="button" class="btn primary writebtn" id="composeBtn">새 메일 쓰기</button>
+    <nav class="nav" id="accts" aria-label="메일 계정">
+      <button type="button" class="navbtn" data-account="all" style="--c:#3182F6"><span class="ic">전</span><span class="lbl">전체 메일함</span><span class="num"></span></button>
+      <button type="button" class="navbtn" data-account="gmail" style="--c:#EA4335"><span class="ic">G</span><span class="lbl">Gmail</span><span class="num"></span></button>
+      <button type="button" class="navbtn" data-account="kakao" style="--c:#F7C600"><span class="ic">K</span><span class="lbl">카카오</span><span class="num"></span></button>
+      <button type="button" class="navbtn" data-account="naver" style="--c:#03C75A"><span class="ic">N</span><span class="lbl">네이버</span><span class="num"></span></button>
+    </nav>
+    <div class="side-h">메일함</div>
+    <nav class="nav" id="boxes" aria-label="메일함">
+      <button type="button" class="navbtn" data-box="inbox" style="--c:var(--accent)"><span class="dot"></span><span class="lbl">받은메일함</span></button>
+      <button type="button" class="navbtn" data-box="sent" style="--c:var(--faint)"><span class="dot"></span><span class="lbl">보낸메일함</span></button>
+      <button type="button" class="navbtn" data-box="drafts" style="--c:var(--ad)"><span class="dot"></span><span class="lbl">임시보관함 (Gmail)</span></button>
+      <button type="button" class="navbtn" data-box="trash" style="--c:var(--danger)"><span class="dot"></span><span class="lbl">휴지통</span></button>
+    </nav>
+    <div class="side-h" id="catsHead">분류</div>
+    <nav class="nav" id="cats" aria-label="분류"></nav>
+    <button type="button" class="navbtn sigbtn" id="sigBtn"><span class="dot" style="--c:var(--news)"></span><span class="lbl">서명·명함 관리</span></button>
+    <p class="side-foot" id="foot"></p>
+  </aside>
+
+  <section class="listpane" aria-label="메일 목록">
+    <header class="lhead">
+      <div class="lrow">
+        <h1 id="ltitle">Gmail</h1>
+        <button type="button" class="btn ai" id="todoBtn" title="지금 목록에서 처리할 메일만 뽑기">할 일</button>
+        <button type="button" class="iconbtn" id="helpBtn" title="단축키 (?)" aria-label="단축키">?</button>
+        <button type="button" class="btn primary writesm" id="composeBtn2">쓰기</button>
+        <button type="button" class="iconbtn" id="refresh" title="새로 고침" aria-label="새로 고침">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+        </button>
+      </div>
+      <div class="lrow2">
+        <div class="seg" role="group" aria-label="기간">
+          <button type="button" data-range="today" aria-pressed="true">오늘</button>
+          <button type="button" data-range="yesterday" aria-pressed="false">어제</button>
+          <button type="button" data-range="week" aria-pressed="false">이번 주</button>
+          <button type="button" data-range="month" aria-pressed="false">한 달</button>
+        </div>
+        <label class="switch" for="unreadOnly"><input type="checkbox" id="unreadOnly"> 안 읽은 것만</label>
+      </div>
+      <form class="searchbox" id="searchForm" role="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="q" placeholder="보낸 사람, 제목으로 검색" autocomplete="off" aria-label="메일 검색">
+        <button type="button" class="iconbtn" id="qClear" title="검색 지우기" aria-label="검색 지우기" hidden>✕</button>
+      </form>
+      <span class="fresh" id="fresh">불러오는 중</span>
+    </header>
+    <div id="bulkbar" class="bulkbar" hidden></div>
+    <div id="notice"></div>
+    <ul class="mlist" id="list"></ul>
+  </section>
+
+  <section class="readpane" id="reader" aria-label="메일 읽기"></section>
+</div>
+
+<script>
+/*PURE-START*/
+var CATS = [
+  {key:"act",  label:"확인 필요",  color:"var(--act)"},
+  {key:"bill", label:"결제·알림", color:"var(--bill)"},
+  {key:"news", label:"뉴스레터",  color:"var(--news)"},
+  {key:"ad",   label:"광고",      color:"var(--ad)"}
+];
+var BILL_RE = /(결제|영수증|청구|요금|명세서|약관|입금|이체|납부|receipt|invoice|payment)/i;
+var AD_RE = /^\s*[\(\[]\s*광고\s*[\)\]]/;
+var IMAP_SKIP = ["Sent Messages","Drafts","내게쓴메일함","스팸편지함","Junk","예약편지함","Deleted Messages","휴지통","Trash"];
+var IMAP_NEWS = ["소셜","SNS","카페"];
+var IMAP_AD = ["프로모션"];
+var IMAP_BILL = ["청구서","청구·결제","쇼핑"];
+var IMAP_PLAIN = ["INBOX","Deleted Messages","보관함"];
+
+function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function addDays(d, n){ var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+function rangeBounds(range, now){
+  var t0 = startOfDay(now);
+  if (range === "yesterday") return {from: addDays(t0, -1), to: t0};
+  if (range === "month") return {from: addDays(t0, -29), to: addDays(t0, 1)};
+  if (range === "week"){
+    var dow = (t0.getDay() + 6) % 7; // 월요일 시작
+    return {from: addDays(t0, -dow), to: addDays(t0, 1)};
+  }
+  return {from: t0, to: addDays(t0, 1)};
+}
+function pad(n){ return (n < 10 ? "0" : "") + n; }
+function ymd(d, sep){ return d.getFullYear() + sep + pad(d.getMonth() + 1) + sep + pad(d.getDate()); }
+function inRange(dateMs, b){ return dateMs >= b.from.getTime() && dateMs < b.to.getTime(); }
+
+function classifyGmail(labelIds, subject, sender, userLabelNames){
+  if (userLabelNames && userLabelNames.length) return "act";
+  var has = function(x){ return labelIds.indexOf(x) !== -1; };
+  if (has("CATEGORY_SOCIAL")) return "news";
+  if (has("CATEGORY_PROMOTIONS") || AD_RE.test(subject)) return "ad";
+  if (has("CATEGORY_UPDATES") || BILL_RE.test(subject)) return "bill";
+  return "act";
+}
+function classifyImap(folder, subject){
+  if (IMAP_NEWS.indexOf(folder) !== -1) return "news";
+  if (IMAP_AD.indexOf(folder) !== -1 || AD_RE.test(subject)) return "ad";
+  if (IMAP_BILL.indexOf(folder) !== -1 || BILL_RE.test(subject)) return "bill";
+  return "act";
+}
+function parseFrom(raw){
+  raw = String(raw || "");
+  var m = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (m) return {name: (m[1] || m[2]).trim(), addr: m[2].trim()};
+  return {name: raw.trim(), addr: raw.trim()};
+}
+function mapGmailThread(t, labelNames, sent, allowTrash){
+  var msgs = (t && t.messages) || [];
+  if (!msgs.length) return null;
+  var m = msgs[msgs.length - 1];
+  var labelIds = m.labelIds || [];
+  if (labelIds.indexOf("DRAFT") !== -1) return null;
+  if (!allowTrash && labelIds.indexOf("TRASH") !== -1) return null;
+  if (!sent && labelIds.indexOf("SENT") !== -1) return null;
+  var name = m.sender || "";
+  var names = m.addressDisplayNames || [];
+  for (var i = 0; i < names.length; i++){
+    if (names[i].emailAddress === m.sender && names[i].displayName){ name = names[i].displayName; break; }
+  }
+  if (sent){   // 보낸 메일은 받는 사람을 보여 준다
+    var tos = (m.toRecipients || []).map(function(a){
+      for (var k = 0; k < names.length; k++) if (names[k].emailAddress === a && names[k].displayName) return names[k].displayName;
+      return a;
+    });
+    name = tos.length ? tos.slice(0, 2).join(", ") + (tos.length > 2 ? " 외 " + (tos.length - 2) + "명" : "") : "(받는 사람 없음)";
+  }
+  var userLabels = [];
+  for (var j = 0; j < labelIds.length; j++){
+    var id = labelIds[j];
+    if (/^Label_/.test(id)) userLabels.push((labelNames && labelNames[id]) || "라벨");
+  }
+  var subject = m.subject || "(제목 없음)";
+  var url = t.viewUrl || m.viewUrl || "";
+  return {
+    id: t.id, dateMs: Date.parse(m.date), from: name, subject: subject, snippet: m.snippet || "",
+    unread: !sent && labelIds.indexOf("UNREAD") !== -1, sent: !!sent, starred: labelIds.indexOf("STARRED") !== -1,
+    chips: userLabels, work: userLabels.length > 0,
+    url: /^https:\/\/mail\.google\.com\//.test(url) ? url : "",
+    count: t.messageCount || 1,
+    cat: classifyGmail(labelIds, subject, m.sender || "", userLabels)
+  };
+}
+function mapImapMessage(m, sent, trash){
+  if (!m || (!sent && !trash && IMAP_SKIP.indexOf(m.folder) !== -1)) return null;
+  var f = parseFrom(sent ? ((m.to || [])[0] || "") : m.from);
+  var subject = m.subject || "(제목 없음)";
+  var folder = m.folder || "INBOX";
+  var custom = IMAP_PLAIN.indexOf(folder) === -1 && IMAP_NEWS.indexOf(folder) === -1 &&
+               IMAP_AD.indexOf(folder) === -1 && IMAP_BILL.indexOf(folder) === -1;
+  var chips = [];
+  if (folder === "Deleted Messages") chips.push("휴지통");
+  else if (folder !== "INBOX") chips.push(folder);
+  return {
+    id: folder + ":" + m.uid, dateMs: Date.parse(m.date), from: f.name, subject: subject, snippet: "",
+    unread: !sent && (m.flags || []).indexOf("\\Seen") === -1, starred: (m.flags || []).indexOf("\\Flagged") !== -1,
+    sent: !!sent, fromAddr: parseFrom(m.from).addr,
+    chips: chips, work: custom, url: "", count: 1, folder: folder, uid: m.uid, msgid: m.messageId || "",
+    cat: custom ? "act" : classifyImap(folder, subject)
+  };
+}
+function cleanBody(text, max){
+  var lines = String(text || "").replace(/\r/g, "").split("\n"), out = [];
+  for (var i = 0; i < lines.length; i++){
+    var l = lines[i].replace(/^\s*\|\s?/, "").replace(/\s?\|\s*$/, "");
+    if (/^[\s|:\-]*$/.test(l)) l = "";
+    l = l.replace(/!?\[([^\]]*)\]\((?:https?:|mailto:)[^)\s]*\)/g, "$1").replace(/^#+\s*/, "").replace(/\*\*([^*]+)\*\*/g, "$1");
+    out.push(l.replace(/\s+$/, ""));
+  }
+  var s = out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
+  max = max || 6000;
+  if (s.length > max) s = s.slice(0, max) + "\n\n… 이하 생략. 전체 내용은 Gmail에서 확인하세요.";
+  return s;
+}
+// 메일 HTML을 격리된 틀 안에 넣을 문서로 만든다. 스크립트는 막고, 바깥 이미지는 사용자가 허락할 때만 불러온다
+// (바깥 이미지는 수신 확인·추적에 쓰이는 경우가 많다).
+function frameDoc(html, showImages){
+  var h = String(html || "")
+    .replace(/<script[\s\S]*?<\/script\s*>/gi, "")
+    .replace(/<meta[^>]+http-equiv\s*=\s*["']?(refresh|content-security-policy)[^>]*>/gi, "")
+    .replace(/<base\b[^>]*>/gi, "");
+  var remote = showImages ? " https: http:" : "";
+  var head = '<meta charset="utf-8">' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'none\'; style-src \'unsafe-inline\'' + remote +
+    '; font-src data:' + remote + '; img-src data: blob:' + remote + '; media-src data:' + remote + '">' +
+    '<base target="_blank">' +
+    '<style>html{background:#FFFFFF;color:#1E2630;color-scheme:light}body{margin:0;padding:14px;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:14px;line-height:1.5;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>';
+  if (/<head[^>]*>/i.test(h)) return h.replace(/<head[^>]*>/i, function(m){ return m + head; });
+  if (/<html[^>]*>/i.test(h)) return h.replace(/<html[^>]*>/i, function(m){ return m + "<head>" + head + "</head>"; });
+  return "<!DOCTYPE html><html><head>" + head + "</head><body>" + h + "</body></html>";
+}
+function hasRemoteImages(html){ return /<img[^>]+src\s*=\s*["']?\s*https?:/i.test(String(html || "")) || /url\(\s*["']?https?:/i.test(String(html || "")); }
+function b64ToBlob(b64, type){
+  var bin = atob(String(b64).replace(/\s+/g, "")), n = bin.length, u = new Uint8Array(n);
+  for (var i = 0; i < n; i++) u[i] = bin.charCodeAt(i);
+  return new Blob([u], {type: type || "application/octet-stream"});
+}
+// 첨부 다운로드 결과에서 파일 내용과 설명 글을 꺼낸다
+function attFromResult(r, fallbackType){
+  var blocks = (r && r.content) || [], blob = null, texts = [];
+  for (var i = 0; i < blocks.length; i++){
+    var b = blocks[i] || {};
+    if (!blob && typeof b.data === "string" && b.mimeType) blob = b64ToBlob(b.data, b.mimeType);
+    else if (!blob && b.resource && typeof b.resource.blob === "string") blob = b64ToBlob(b.resource.blob, b.resource.mimeType || fallbackType);
+    else if (b.resource && typeof b.resource.text === "string") texts.push(b.resource.text);
+    else if (typeof b.text === "string") texts.push(b.text);
+  }
+  return {blob: blob, text: texts.join("\n\n")};
+}
+function fileUri(p){
+  var s = String(p || "").replace(/\\/g, "/");
+  if (!/^\//.test(s)) s = "/" + s;
+  return "file://" + s.split("/").map(function(seg, i){ return /^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg); }).join("/");
+}
+// markitdown이 만든 글(제목·표·문단)을 간단한 HTML로 바꾼다
+function mdToHtml(md){
+  function esc(t){ return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function inline(t){ return esc(t).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>"); }
+  var lines = String(md || "").replace(/\r/g, "").split("\n"), out = [], i = 0;
+  while (i < lines.length){
+    var l = lines[i];
+    if (/^\s*\|/.test(l)){
+      var rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])){ rows.push(lines[i]); i++; }
+      var html = "<table>";
+      rows.forEach(function(r, k){
+        if (/^\s*\|[\s:\-|]+\|\s*$/.test(r)) return;      // 구분선
+        var cells = r.trim().replace(/^\||\|$/g, "").split("|");
+        var tag = k === 0 ? "th" : "td";
+        html += "<tr>" + cells.map(function(c){ return "<" + tag + ">" + inline(c.trim()) + "</" + tag + ">"; }).join("") + "</tr>";
+      });
+      out.push(html + "</table>");
+      continue;
+    }
+    var h = /^(#{1,6})\s+(.*)$/.exec(l);
+    if (h){ var n = Math.min(h[1].length + 1, 6); out.push("<h" + n + ">" + inline(h[2]) + "</h" + n + ">"); i++; continue; }
+    if (!l.trim()){ i++; continue; }
+    var para = [];
+    while (i < lines.length && lines[i].trim() && !/^\s*\|/.test(lines[i]) && !/^#{1,6}\s/.test(lines[i])){ para.push(inline(lines[i])); i++; }
+    out.push("<p>" + para.join("<br>") + "</p>");
+  }
+  return "<style>table{border-collapse:collapse;font-size:12.5px;margin:6px 0 14px}td,th{border:1px solid #CCD3DB;padding:3px 6px;vertical-align:top}th{background:#F3F5F7}h2,h3,h4{font-size:15px;margin:16px 0 6px}p{margin:0 0 10px}</style>" + out.join("\n");
+}
+function fmtSize(n){
+  if (!n && n !== 0) return "";
+  if (n < 1024) return n + "B";
+  if (n < 1048576) return Math.round(n / 1024) + "KB";
+  return (n / 1048576).toFixed(1) + "MB";
+}
+/*PURE-END*/
+
+(function(){
+  var state = {account:"gmail", range:"today", unreadOnly:false, cat:"all", box:"inbox"};
+  state.q = "";   // 검색어 (저장하지 않는다)
+  function keyOf(acc){ return acc + "|" + state.box + "|" + (state.q ? "q:" + state.q : state.box === "trash" ? "all" : state.range); }
+  var SEARCH_SINCE_DAYS = 365;   // 검색은 최근 1년 안에서
+  var store = {};          // "account|range" -> {items, at, error}
+  var open = {};           // 펼친 Gmail 스레드 id -> {loading, msgs, error}
+  var labelNames = null;   // Gmail 라벨 ID -> 이름
+  var mcp = null, mcpReady = false, loadSeq = 0;
+  var downloads = null;
+  var moreLv = {}, loadMul = 1;   // 화면별 "더 불러오기" 단계    // 첨부를 파일로 저장할 때 쓴다 (없으면 저장 버튼을 숨긴다)
+  var trashNote = null;    // 방금 휴지통으로 옮긴 메일 {x, undoing, error, undone}
+  var ACC = {
+    gmail:{label:"Gmail", server:"Gmail", site:"https://mail.google.com/"},
+    kakao:{label:"카카오", server:"host:imap", site:"https://mail.kakao.com/"},
+    naver:{label:"네이버", server:"host:imap", site:"https://mail.naver.com/"},
+    all:{label:"전체 메일함", server:null, site:""}
+  };
+  var ACC_COLOR = {gmail:"#EA4335", kakao:"#F7C600", naver:"#03C75A"};
+
+  try{
+    var saved = JSON.parse(localStorage.getItem("mailview") || "null");
+    if (saved){
+      if (ACC[saved.account]) state.account = saved.account;
+      if (["today","yesterday","week","month"].indexOf(saved.range) !== -1) state.range = saved.range;
+      state.unreadOnly = !!saved.unreadOnly;
+      if (["sent", "inbox", "drafts", "trash"].indexOf(saved.box) !== -1) state.box = saved.box;
+      if (saved.cat === "all" || CATS.some(function(c){ return c.key === saved.cat; })) state.cat = saved.cat;
+    }
+  }catch(e){}
+  function persist(){ try{ localStorage.setItem("mailview", JSON.stringify(state)); }catch(e){} }
+
+  var $ = function(id){ return document.getElementById(id); };
+  function el(tag, cls, text){
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  var decoder = document.createElement("textarea");
+  function decode(s){ decoder.innerHTML = String(s || ""); return decoder.value; }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  // 읽기 호출: 다시 시도해도 되는 오류만 한 번 재시도
+  function readTool(server, tool, input, fresh){
+    var opts = fresh ? {cache:{refresh:true}} : undefined;
+    return mcp.callTool(server, tool, input, opts).catch(function(e){
+      if (e && e.retryable){
+        var wait = Math.min(e.retryAfterMs || 0, 8000) || (600 + Math.random() * 900);
+        return sleep(wait).then(function(){ return mcp.callTool(server, tool, input, opts); });
+      }
+      throw e;
+    });
+  }
+
+  function loadLabels(){
+    if (labelNames) return Promise.resolve(labelNames);
+    return readTool("Gmail", "list_labels", {}).then(function(r){
+      var map = {};
+      var ls = (r.payload && r.payload.labels) || [];
+      for (var i = 0; i < ls.length; i++) map[ls[i].labelId] = ls[i].name;
+      labelNames = map; return map;
+    }).catch(function(){ return {}; });   // 라벨 이름이 없어도 목록은 보여 준다
+  }
+
+  function fetchGmail(range, fresh, sent, q){
+    var b = rangeBounds(range, new Date());
+    if (q) b = {from: addDays(startOfDay(new Date()), -SEARCH_SINCE_DAYS), to: addDays(startOfDay(new Date()), 1)};
+    var query = q ? q + (sent ? " in:sent" : " -in:sent") + " -in:drafts newer_than:1y" : sent ? "in:sent after:" + ymd(addDays(b.from, -1), "/") : "after:" + ymd(addDays(b.from, -1), "/") + " -in:sent -in:drafts";
+    var items = [], storedAt = null, pages = 0;
+    function page(token){
+      var input = {query: query, pageSize: 50, view: "THREAD_VIEW_SUMMARY"};
+      if (token) input.pageToken = token;
+      return readTool("Gmail", "search_threads", input, fresh).then(function(r){
+        var p = r.payload || {};
+        if (r.cache && r.cache.storedAt) storedAt = storedAt ? Math.min(storedAt, r.cache.storedAt) : r.cache.storedAt;
+        var ts = p.threads || [];
+        for (var i = 0; i < ts.length; i++){
+          var it = mapGmailThread(ts[i], labelNames, sent);
+          if (it && inRange(it.dateMs, b)){ it.snippet = decode(it.snippet); it.subject = decode(it.subject); items.push(it); }
+        }
+        pages++;
+        if (p.nextPageToken && pages < (q ? 2 : 6) * loadMul) return page(p.nextPageToken);
+        return {items: items, at: storedAt || Date.now(), more: !!p.nextPageToken};
+      });
+    }
+    return loadLabels().then(function(){ return page(null); });
+  }
+
+  function fetchImap(account, range, fresh, sent, q){
+    if (q){
+      var since = ymd(addDays(startOfDay(new Date()), -SEARCH_SINCE_DAYS), "-");
+      var base = sent ? {accountName: account, since: since, folder: "Sent Messages", limit: 100}
+                      : {accountName: account, since: since, searchAllFolders: true, includeTrash: false, limit: 100};
+      var who = sent ? "to" : "from";
+      var tries = [Object.assign({subject: q}, base), Object.assign((function(){ var o = {}; o[who] = q; return o; })(), base)];
+      return Promise.all(tries.map(function(inp){ return readTool("host:imap", "imap_search_emails", inp, fresh); })).then(function(rs){
+        var seen = {}, items = [], more = false, at = Date.now();
+        rs.forEach(function(r){
+          var p = r.payload || {}, ms = p.messages || [];
+          if ((p.totalFound || 0) > (p.returned || ms.length)) more = true;
+          if (r.cache && r.cache.storedAt) at = Math.min(at, r.cache.storedAt);
+          ms.forEach(function(m){
+            if (sent && !m.folder) m.folder = "Sent Messages";
+            var it = mapImapMessage(m, sent);
+            if (!it) return;
+            it.acc = account; it.id = account + ":" + it.id;
+            if (!seen[it.id]){ seen[it.id] = true; items.push(it); }
+          });
+        });
+        return {items: items, at: at, more: more};
+      });
+    }
+    var b = rangeBounds(range, new Date());
+    var input = sent
+      ? {accountName: account, since: ymd(addDays(b.from, -1), "-"), folder: "Sent Messages", limit: 300 * loadMul}
+      : {accountName: account, since: ymd(addDays(b.from, -1), "-"), searchAllFolders: true, includeTrash: false, limit: 300 * loadMul};
+    return readTool("host:imap", "imap_search_emails", input, fresh).then(function(r){
+      var p = r.payload || {};
+      var ms = p.messages || [], items = [];
+      for (var i = 0; i < ms.length; i++){
+        if (sent && !ms[i].folder) ms[i].folder = "Sent Messages";
+        var it = mapImapMessage(ms[i], sent);
+        if (it && inRange(it.dateMs, b)){ it.acc = account; it.id = account + ":" + it.id; items.push(it); }
+      }
+      return {items: items, at: (r.cache && r.cache.storedAt) || Date.now(),
+              more: (p.totalFound || 0) > (p.returned || ms.length)};
+    });
+  }
+
+  function fetchDrafts(fresh, q){
+    var input = {pageSize: 50, view: "DRAFT_VIEW_FULL"};
+    if (q) input.query = q;
+    return readTool("Gmail", "list_drafts", input, fresh).then(function(r){
+      var p = r.payload || {};
+      var items = (p.drafts || []).map(function(d){
+        var m = d.message || d;
+        var tos = m.toRecipients || d.toRecipients || [];
+        var body = m.plaintextBody || d.plaintextBody || "";
+        return {id: "d:" + (d.id || d.draftId), draftId: d.id || d.draftId, isDraft: true,
+          dateMs: Date.parse(m.date || d.date) || Date.now(), from: tos.length ? tos.join(", ") : "(받는 사람 없음)",
+          to: tos, cc: m.ccRecipients || d.ccRecipients || [], subject: m.subject || d.subject || "(제목 없음)",
+          body: body, snippet: body.replace(/\s+/g, " ").slice(0, 120), unread: false, chips: [], work: false, count: 1, cat: "act", url: ""};
+      });
+      return {items: items, at: (r.cache && r.cache.storedAt) || Date.now(), more: !!p.nextPageToken};
+    });
+  }
+
+  function isTrashFolder(fd){ return /trash/i.test(fd.use || "") || /^(Deleted Messages|휴지통|Trash|Deleted Items)$/i.test(fd.name); }
+  function fetchTrash(acc, fresh, q){
+    if (acc === "gmail"){
+      var items = [], pages = 0, storedAt = null;
+      var page = function(token){
+        var input = {query: "in:trash" + (q ? " " + q : ""), pageSize: 50, view: "THREAD_VIEW_SUMMARY", includeTrash: true};
+        if (token) input.pageToken = token;
+        return readTool("Gmail", "search_threads", input, fresh).then(function(r){
+          var p = r.payload || {};
+          if (r.cache && r.cache.storedAt) storedAt = storedAt ? Math.min(storedAt, r.cache.storedAt) : r.cache.storedAt;
+          (p.threads || []).forEach(function(t){
+            var it = mapGmailThread(t, labelNames, false, true);
+            if (it){ it.snippet = decode(it.snippet); it.subject = decode(it.subject); it.inTrash = true; it.unread = false; items.push(it); }
+          });
+          pages++;
+          if (p.nextPageToken && pages < 2 * loadMul) return page(p.nextPageToken);
+          return {items: items, at: storedAt || Date.now(), more: !!p.nextPageToken};
+        });
+      };
+      return loadLabels().then(function(){ return page(null); });
+    }
+    return imapFolders(acc).then(function(fds){
+      var tf = fds.filter(isTrashFolder)[0];
+      if (!tf) return {items: [], at: Date.now(), more: false};
+      var input = {accountName: acc, folder: tf.name, since: ymd(addDays(startOfDay(new Date()), -365), "-"), limit: 200 * loadMul};
+      if (q) input.subject = q;
+      return readTool("host:imap", "imap_search_emails", input, fresh).then(function(r){
+        var p = r.payload || {}, ms = p.messages || [], items = [];
+        ms.forEach(function(m){
+          if (!m.folder) m.folder = tf.name;
+          var it = mapImapMessage(m, false, true);
+          if (it){ it.acc = acc; it.id = acc + ":" + it.id; it.inTrash = true; it.unread = false; it.chips = []; items.push(it); }
+        });
+        return {items: items, at: (r.cache && r.cache.storedAt) || Date.now(), more: (p.totalFound || 0) > (p.returned || ms.length)};
+      });
+    });
+  }
+
+  function fetchAll(range, fresh, sent, q){
+    var accs = ["gmail", "kakao", "naver"];
+    return Promise.all(accs.map(function(a){
+      var p = state.box === "trash" ? fetchTrash(a, fresh, q) : a === "gmail" ? fetchGmail(range, fresh, sent, q) : fetchImap(a, range, fresh, sent, q);
+      return p.then(function(res){ return {acc: a, res: res}; }, function(e){ return {acc: a, err: e || {code: "upstream_error"}}; });
+    })).then(function(parts){
+      var items = [], errs = {}, more = false, at = Date.now();
+      parts.forEach(function(pt){
+        if (pt.err){ errs[pt.acc] = pt.err; return; }
+        if (pt.acc !== "gmail") imapOk[pt.acc] = true;
+        items = items.concat(pt.res.items); more = more || pt.res.more; at = Math.min(at, pt.res.at || at);
+        if (!q && !sent && range === "today" && state.box === "inbox") seedKnown(pt.acc, pt.res.items);
+      });
+      if (Object.keys(errs).length === accs.length) throw errs.gmail || errs.kakao;
+      return {items: items, at: at, more: more, partErrors: errs};
+    });
+  }
+
+  function load(fresh){
+    var key = keyOf(state.account);
+    if (!mcpReady){ render(); return; }
+    if (!mcp){ render(); return; }
+    if (store[key] && !store[key].error && !fresh){ render(); return; }
+    var seq = ++loadSeq;
+    store[key] = {loading: true, items: (store[key] && store[key].items) || null, at: store[key] && store[key].at};
+    render();
+    var sentBox = state.box === "sent";
+    var q = state.q;
+    loadMul = moreLv[key] || 1;
+    var p = state.box === "drafts" ? fetchDrafts(fresh, q) : state.account === "all" ? fetchAll(state.range, fresh, sentBox, q)
+          : state.box === "trash" ? fetchTrash(state.account, fresh, q)
+          : state.account === "gmail" ? fetchGmail(state.range, fresh, sentBox, q) : fetchImap(state.account, state.range, fresh, sentBox, q);
+    p.then(function(res){
+      res.items.sort(function(a, b){ return b.dateMs - a.dateMs; });
+      store[key] = res;
+      var kacc = key.split("|")[0];
+      if (kacc !== "gmail" && kacc !== "all") imapOk[kacc] = true;
+      if (kacc !== "all" && /\|inbox\|today$/.test(key)) seedKnown(kacc, res.items);
+    }).catch(function(e){
+      var denied = e && ["needs_reauth","server_not_connected","blocked_by_policy","approval_required","not_in_manifest","consent_required"].indexOf(e.code) !== -1;
+      store[key] = {error: e || {code:"upstream_error"}, items: denied ? null : (store[key] && store[key].items) || null, at: store[key] && store[key].at};
+    }).then(function(){ if (seq === loadSeq || key !== keyOf(state.account)) render(); else render(); });
+  }
+
+  // 읽음 처리는 쓰기 작업이라 자동으로 다시 시도하지 않는다. 실패하면 버튼으로만 다시 시도한다.
+  function markRead(x){
+    if (!x.unread || x.marking || !mcp) return;
+    x.marking = true; x.markErr = null; render();
+    var call = x.acc
+      ? mcp.callTool("host:imap", "imap_mark_as_read", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      : mcp.callTool("Gmail", "unlabel_thread", {threadId: x.id, labelIds: ["UNREAD"]}, {cache: false});
+    call.then(function(){
+      x.unread = false; x.justRead = true; noteState(x);
+      if (x.acc) mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+      else mcp.invalidate("Gmail", "search_threads").catch(function(){});
+    }).catch(function(e){ x.markErr = e || {code: "upstream_error"}; })
+      .then(function(){ x.marking = false; render(); });
+  }
+  function toggle(x){
+    if (open[x.id] && !open[x.id].error){ render(); return; }   // 이미 불러온 메일은 다시 불러오지 않는다
+    open[x.id] = {loading: true}; render();
+    if (x.acc){
+      readTool("host:imap", "imap_get_email", {accountName: x.acc, folder: x.folder, uid: x.uid, bodyFormat: "html", maxContentLength: 600000, includeAttachmentText: false}).then(function(r){
+        var e = (r.payload && r.payload.email) || {}, att = [];
+        (e.attachments || []).forEach(function(a){
+          var n = a && (a.filename || a.name || a.fileName);
+          if (n) att.push({name: String(n), mime: a.contentType || "", size: a.size, key: "i:" + n, cid: String(a.contentId || "").replace(/^<|>$/g, "")});
+        });
+        if (!open[x.id]) return;
+        var cut = e.contentTruncated && e.contentTruncated.html;
+        open[x.id] = {msgs: [{from: x.from, dateMs: x.dateMs, html: e.htmlContent || "", truncated: !!cut,
+                              body: cleanBody(e.textContent || e.markdownContent || ""), att: att}], atts: {}};
+        render();
+        markRead(x);
+      }).catch(function(e){
+        if (open[x.id]) open[x.id] = {error: e || {code: "upstream_error"}};
+        render();
+      });
+      return;
+    }
+    readTool("Gmail", "get_thread", {threadId: x.id, messageFormat: "FULL_CONTENT"}).then(function(r){
+      var p = r.payload || {}, ms = p.messages || [], out = [];
+      for (var i = 0; i < ms.length; i++){
+        var m = ms[i], nm = m.sender || "", ns = m.addressDisplayNames || [];
+        for (var j = 0; j < ns.length; j++) if (ns[j].emailAddress === m.sender && ns[j].displayName){ nm = ns[j].displayName; break; }
+        var att = [];
+        (m.attachments || []).forEach(function(a){
+          var n = a && (a.filename || a.name || a.fileName);
+          if (n && a.id) att.push({name: String(n), mime: a.mimeType || "", id: a.id, msgId: m.id, key: "g:" + m.id + ":" + a.id});
+        });
+        out.push({id: m.id, addr: m.sender || "", toList: m.toRecipients || [], ccList: m.ccRecipients || [],
+                  from: nm, dateMs: Date.parse(m.date), html: m.htmlBody || "",
+                  body: cleanBody(m.plaintextBody || decode(m.snippet || "")), att: att});
+      }
+      if (!open[x.id]) return;            // 불러오는 사이에 접었으면 읽음 처리도 하지 않는다
+      open[x.id] = {msgs: out, atts: {}};
+      render();
+      markRead(x);
+    }).catch(function(e){
+      if (open[x.id]) open[x.id] = {error: e || {code: "upstream_error"}};
+      render();
+    });
+  }
+
+  // 카카오·네이버 메일과 같은 메일(Message-ID가 같은 것)을 Gmail에서 찾아 그 첨부 목록을 돌려준다
+  function gmailTwin(x){
+    if (x.gmailTwin) return x.gmailTwin;
+    var id = String(x.msgid || "").replace(/^\s*<|>\s*$/g, "");
+    if (!id){ x.gmailTwin = Promise.resolve(null); return x.gmailTwin; }
+    x.gmailTwin = readTool("Gmail", "search_threads", {query: "rfc822msgid:" + id + " in:anywhere", pageSize: 3, view: "THREAD_VIEW_IDS_ONLY"}).then(function(r){
+      var ts = (r.payload && r.payload.threads) || [];
+      if (!ts.length) return null;
+      return readTool("Gmail", "get_thread", {threadId: ts[0].id, messageFormat: "PLAIN_TEXT"}).then(function(t){
+        var ms = (t.payload && t.payload.messages) || [], list = [];
+        ms.forEach(function(m){ (m.attachments || []).forEach(function(at){ if (at && at.id) list.push({msgId: m.id, id: at.id, name: at.filename || "", mime: at.mimeType || ""}); }); });
+        return list;
+      });
+    }).catch(function(){ return null; });
+    return x.gmailTwin;
+  }
+  function gmailTwinAtt(x, a){
+    function norm(s){ return String(s || "").normalize ? String(s || "").normalize("NFC").trim() : String(s || "").trim(); }
+    return gmailTwin(x).then(function(list){
+      if (!list) return null;
+      var hit = list.filter(function(g){ return norm(g.name) === norm(a.name); })[0];
+      if (!hit) return null;
+      return mcp.callTool("Gmail", "download_gmail_attachment", {messageId: hit.msgId, attachmentId: hit.id, filename: hit.name, mimeType: hit.mime || undefined}, {cache: false})
+        .then(function(r){ return attFromResult(r, hit.mime).blob ? r : null; });
+    });
+  }
+
+  // 첨부 보기: 누르면 불러와서 창 안에 보여 주고, 다시 누르면 접는다
+  function toggleAtt(x, o, a){
+    var st = o.atts[a.key];
+    if (st && !st.loading){ st.shown = !st.shown; render(); return; }
+    if (st) return;
+    o.atts[a.key] = {loading: true, shown: true}; render();
+    var imapCall = function(){
+      return mcp.callTool("host:imap", "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: a.name, extractText: true}, {cache: false});
+    };
+    var call = x.acc
+      // 카카오·네이버: 같은 메일이 Gmail에도 들어와 있으면 거기서 원본 파일을 받는다 (없으면 imap으로)
+      ? gmailTwinAtt(x, a).then(function(r){ return r || imapCall(); }, imapCall)
+      : mcp.callTool("Gmail", "download_gmail_attachment", {messageId: a.msgId, attachmentId: a.id, filename: a.name, mimeType: a.mime || undefined}, {cache: false});
+    call.then(function(r){
+      var got = attFromResult(r, a.mime);
+      var s = {shown: true, text: got.text, blob: got.blob};
+      if (got.blob){ s.url = URL.createObjectURL(got.blob); return s; }
+      s.blockTypes = ((r && r.content) || []).map(function(b){
+        return (b && b.type) + (b && b.resource ? "/" + (b.resource.mimeType || "") + (b.resource.blob ? "+blob" : b.resource.text ? "+text" : "") : "");
+      }).join(", ");
+      if (!x.acc) return s;
+      // 카카오·네이버: 사진이 아니면 imap이 PC에 파일을 저장하고 경로만 알려 준다.
+      // 그 파일을 PC의 markitdown으로 읽어 표·문단 형태로 보여 준다.
+      var p = (r && r.payload && typeof r.payload === "object") ? r.payload : {};
+      s.text = p.textContent || "";
+      s.savedPath = p.path || "";
+      if (!s.savedPath) return s;
+      var markdown = function(){ return mcp.callTool("host:markitdown", "convert_to_markdown", {uri: fileUri(s.savedPath)}, {cache: false}).then(function(m){
+        var v = m && m.payload;
+        s.md = typeof v === "string" ? v : (v && typeof v.result === "string" ? v.result : "");
+        return s;
+      }).catch(function(e){ s.mdError = e || {code: "upstream_error"}; return s; }); };
+      // 먼저 PC의 첨부 도우미로 원본 파일을 받아 형식별 미리보기로 연다. 도우미가 없으면 글자로 보여 준다.
+      var base = String(s.savedPath).split(/[\\/]/).pop();
+      return mcp.callTool("host:attachments", "read_saved_attachment", {filename: base}, {cache: false}).then(function(r2){
+        var got2 = attFromResult(r2, a.mime);
+        if (!got2.blob) return markdown();
+        s.blob = got2.blob; s.url = URL.createObjectURL(got2.blob); s.text = "";
+        return s;
+      }, function(e){ s.helperError = e || {code: "upstream_error"}; return markdown(); });
+    }).then(function(s){
+      o.atts[a.key] = s;
+    }).catch(function(e){
+      o.atts[a.key] = {shown: true, error: e || {code: "upstream_error"}};
+    }).then(render);
+  }
+  function saveAtt(a, s){
+    if (!downloads || !s.blob) return;
+    s.saveMsg = "저장 창을 여는 중"; render();
+    downloads.save({filename: a.name, data: s.blob}).then(function(){ s.saveMsg = "저장했습니다"; })
+      .catch(function(e){ s.saveMsg = e && e.code === "cancelled" ? "저장을 취소했습니다" : "저장하지 못했습니다"; })
+      .then(render);
+  }
+
+  // 삭제: 각 메일함의 휴지통으로 옮긴다. 쓰기 작업이라 자동 재시도는 하지 않는다.
+  // 휴지통에 이미 있는 카카오 메일은 지우면 영구 삭제되므로 버튼을 보여 주지 않는다 (canDelete).
+  function canDelete(x){ return !x.inTrash && !x.isDraft && (!x.acc || x.folder !== "Deleted Messages"); }
+  function trash(x){
+    if (x.deleting || !mcp || !canDelete(x)) return Promise.resolve(false);
+    x.deleting = true; x.delErr = null; render();
+    var call = x.acc
+      ? mcp.callTool("host:imap", "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      : mcp.callTool("Gmail", "trash_thread", {threadId: x.id}, {cache: false});
+    return call.then(function(){
+      x.trashed = true; x.confirmDel = false; delete open[x.id]; dropTrashLists(); delete picked[x.id]; noteState(x);
+      trashNote = {x: x};
+      if (x.acc) mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+      else mcp.invalidate("Gmail", "search_threads").catch(function(){});
+      return true;
+    }).catch(function(e){ x.delErr = e || {code: "upstream_error"}; return false; })
+      .then(function(ok){ x.deleting = false; render(); return ok; });
+  }
+  function untrash(){
+    var n = trashNote;
+    if (!n || n.undoing) return;
+    n.undoing = true; n.error = null; render();
+    mcp.callTool("Gmail", "untrash_thread", {threadId: n.x.id}, {cache: false}).then(function(){
+      n.x.trashed = false; n.undone = true; noteState(n.x);
+      mcp.invalidate("Gmail", "search_threads").catch(function(){});
+    }).catch(function(e){ n.error = e || {code: "upstream_error"}; })
+      .then(function(){ n.undoing = false; render(); });
+  }
+
+  // 메일 HTML을 격리된 틀에 그리고, 내용 높이에 맞춰 틀 높이를 늘린다
+  function mailFrame(html, showImages){
+    var f = document.createElement("iframe");
+    f.className = "mailframe";
+    f.title = "메일 본문";
+    f.setAttribute("sandbox", "allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    function fit(){
+      try{
+        var d = f.contentDocument;
+        if (!d || !d.documentElement) return;
+        var h = Math.max(d.documentElement.scrollHeight, d.body ? d.body.scrollHeight : 0);
+        if (h) f.style.height = (h + 4) + "px";
+      }catch(e){}
+    }
+    f.addEventListener("load", function(){
+      fit();
+      try{
+        var imgs = f.contentDocument.images;
+        for (var i = 0; i < imgs.length; i++) imgs[i].addEventListener("load", fit);
+      }catch(e){}
+      setTimeout(fit, 400); setTimeout(fit, 1500);
+    });
+    f.srcdoc = frameDoc(html, showImages);
+    return f;
+  }
+
+  // ---- 첨부 미리보기: 형식별로 페이지 안에서 직접 그린다 ----
+  var LIBS = {
+    pdf: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+    pdfWorker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
+    xlsx: "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+    zip: "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+    docx: "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"
+  };
+  var libLoads = {};
+  function loadLib(key){
+    if (libLoads[key]) return libLoads[key];
+    libLoads[key] = new Promise(function(res, rej){
+      var sc = document.createElement("script");
+      sc.src = LIBS[key]; sc.async = true;
+      sc.onload = function(){ res(); };
+      sc.onerror = function(){ delete libLoads[key]; rej(new Error("lib")); };
+      document.head.appendChild(sc);
+    });
+    return libLoads[key];
+  }
+  function extOf(name){ var m = /\.([a-z0-9]+)$/i.exec(name || ""); return m ? m[1].toLowerCase() : ""; }
+  function kindOf(name, type){
+    var e = extOf(name); type = type || "";
+    if (/^image\//.test(type) || /^(jpe?g|png|gif|webp|bmp|svg)$/.test(e)) return "image";
+    if (/pdf/.test(type) || e === "pdf") return "pdf";
+    if (/^(docx|docm|dotx)$/.test(e)) return "docx";
+    if (/^(xlsx|xlsm|xls|xlsb|ods)$/.test(e) || /spreadsheet|ms-excel/.test(type)) return "sheet";
+    if (/^(pptx|ppsx|potx)$/.test(e)) return "pptx";
+    if (e === "hwpx") return "hwpx";
+    if (/^(zip)$/.test(e) || /zip/.test(type)) return "zip";
+    if (/^(html?|xhtml)$/.test(e) || /html/.test(type)) return "html";
+    if (/^(eml)$/.test(e) || /rfc822/.test(type)) return "text";
+    if (/^(txt|csv|tsv|json|xml|md|log|ini|yml|yaml)$/.test(e) || /^text\//.test(type) || /json|xml|csv/.test(type)) return "text";
+    if (/^(mp3|m4a|wav|ogg)$/.test(e) || /^audio\//.test(type)) return "audio";
+    if (/^(mp4|webm|mov)$/.test(e) || /^video\//.test(type)) return "video";
+    if (e === "hwp") return "hwp";
+    return "other";
+  }
+  function note(box, text){ box.appendChild(el("span", "cap", text)); }
+  // 문서 XML 안의 글자(<*:t>)를 문단(<*:p>) 단위로 모은다 — hwpx·pptx 공통
+  function xmlText(xml){
+    var doc = new DOMParser().parseFromString(xml, "application/xml"), out = [];
+    var ps = doc.getElementsByTagName("*");
+    for (var i = 0; i < ps.length; i++){
+      if (ps[i].localName !== "p") continue;
+      var ts = ps[i].getElementsByTagName("*"), line = "";
+      for (var j = 0; j < ts.length; j++) if (ts[j].localName === "t") line += ts[j].textContent;
+      if (line.trim()) out.push(line);
+    }
+    return out.join("\n");
+  }
+  function sortNum(a, b){ return (parseInt(a.replace(/\D+/g, ""), 10) || 0) - (parseInt(b.replace(/\D+/g, ""), 10) || 0); }
+
+  function renderPdf(box, blob){
+    var MAX = 40;
+    // PDF 처리기를 별도 작업 공간(워커) 없이 이 페이지 안에서 돌린다.
+    // claude.ai 화면 안에서는 워커를 띄우는 것이 막힐 수 있어서, 처리기 스크립트를 먼저 읽어 두면 pdf.js가 페이지 안에서 처리한다.
+    return loadLib("pdf").then(function(){ return loadLib("pdfWorker"); }).then(function(){ return blob.arrayBuffer(); }).then(function(buf){
+      var lib = window.pdfjsLib;
+      if (!lib) throw new Error("PDF 보기 프로그램을 불러오지 못했어요");
+      lib.GlobalWorkerOptions.workerSrc = LIBS.pdfWorker;
+      return lib.getDocument({data: new Uint8Array(buf), isEvalSupported: false}).promise;
+    }).then(function(pdf){
+      var n = Math.min(pdf.numPages, MAX);
+      var head = el("span", "cap", pdf.numPages + "쪽" + (pdf.numPages > MAX ? " 중 앞 " + MAX + "쪽만 보여 줍니다" : ""));
+      box.appendChild(head);
+      var chain = Promise.resolve();
+      for (var p = 1; p <= n; p++) (function(p){
+        chain = chain.then(function(){ return pdf.getPage(p); }).then(function(page){
+          var width = Math.max(320, Math.min(box.clientWidth || 760, 1100));
+          var base = page.getViewport({scale: 1});
+          var dpr = Math.min(window.devicePixelRatio || 1, 2);
+          var vp = page.getViewport({scale: (width / base.width) * dpr});
+          var c = document.createElement("canvas");
+          c.width = vp.width; c.height = vp.height;
+          c.style.width = "100%"; c.style.maxWidth = width + "px"; c.style.display = "block";
+          c.style.background = "#FFFFFF"; c.style.border = "1px solid var(--line)"; c.style.marginTop = "8px";
+          box.appendChild(c);
+          return page.render({canvasContext: c.getContext("2d"), viewport: vp}).promise;
+        });
+      })(p);
+      return chain;
+    });
+  }
+  function renderDocx(box, blob){
+    return Promise.all([loadLib("docx"), blob.arrayBuffer()]).then(function(r){
+      return window.mammoth.convertToHtml({arrayBuffer: r[1]});
+    }).then(function(res){ box.appendChild(mailFrame(res.value || "<p>(내용 없음)</p>", false)); });
+  }
+  function renderSheet(box, blob){
+    return Promise.all([loadLib("xlsx"), blob.arrayBuffer()]).then(function(r){
+      var X = window.XLSX, wb = X.read(new Uint8Array(r[1]), {type: "array"});
+      var html = "<style>table{border-collapse:collapse;font-size:12.5px}td,th{border:1px solid #CCD3DB;padding:3px 6px;white-space:nowrap}h3{font-size:14px;margin:16px 0 6px}</style>";
+      wb.SheetNames.slice(0, 10).forEach(function(nm){
+        var ws = wb.Sheets[nm];
+        if (ws["!ref"]){   // 너무 큰 시트는 앞부분만
+          var rg = X.utils.decode_range(ws["!ref"]);
+          if (rg.e.r > 1000){ rg.e.r = 1000; ws["!ref"] = X.utils.encode_range(rg); }
+        }
+        html += "<h3>" + nm.replace(/[<&]/g, "") + "</h3>" + X.utils.sheet_to_html(ws, {header: "", footer: ""});
+      });
+      if (wb.SheetNames.length > 10) html += "<p>시트가 많아 앞 10개만 보여 줍니다.</p>";
+      box.appendChild(mailFrame(html, false));
+    });
+  }
+  function renderZipText(box, blob, kind){
+    return Promise.all([loadLib("zip"), blob.arrayBuffer()]).then(function(r){
+      return window.JSZip.loadAsync(r[1]);
+    }).then(function(z){
+      var names = Object.keys(z.files);
+      if (kind === "zip"){
+        var lines = names.filter(function(n){ return !z.files[n].dir; }).map(function(n){ return n; });
+        box.appendChild(el("pre", null, "압축 안 파일 " + lines.length + "개\n\n" + lines.join("\n")));
+        note(box, "압축 안의 파일은 저장해서 풀어 주세요.");
+        return;
+      }
+      var re = kind === "hwpx" ? /^Contents\/section\d+\.xml$/i : /^ppt\/slides\/slide\d+\.xml$/i;
+      var parts = names.filter(function(n){ return re.test(n); }).sort(sortNum);
+      return Promise.all(parts.map(function(n){ return z.file(n).async("string"); })).then(function(xs){
+        var txt = xs.map(function(x, i){ return (kind === "pptx" ? "[" + (i + 1) + "번 슬라이드]\n" : "") + xmlText(x); }).join("\n\n");
+        box.appendChild(el("pre", null, txt || "(글자가 없습니다)"));
+        note(box, kind === "hwpx" ? "한글 문서의 글자만 보여 줍니다. 표·그림 모양은 파일로 저장해서 확인해 주세요."
+                                  : "슬라이드의 글자만 보여 줍니다. 디자인은 파일로 저장해서 확인해 주세요.");
+      });
+    });
+  }
+  function buildPreview(box, x, a, s){
+    var type = (s.blob && s.blob.type) || a.mime || "";
+    var kind = kindOf(a.name, type);
+    if (!s.blob){
+      // 원본 파일을 못 받은 경우: 글자로라도 보여 주고, 왜 원본이 없는지 알려 준다
+      if (s.helperError){
+        var hc = s.helperError.code;
+        note(box, hc === "server_not_connected" || hc === "not_in_manifest"
+          ? "원래 모양으로 보려면 PC의 첨부 도우미가 필요해요. Claude 앱을 완전히 종료했다가 다시 열어 주세요. 지금은 글자만 보여 드려요."
+          : hc === "cancelled" ? "PC에서 첨부 도우미 사용을 허용하지 않아 글자만 보여 드려요. 다시 열면 한 번 더 물어봐요."
+          : "첨부 도우미가 파일을 넘겨주지 못했어요 (" + (hc || "오류") + (s.helperError.message ? ": " + String(s.helperError.message).slice(0, 80) : "") + "). 글자만 보여 드려요.");
+      }
+      if (s.md && s.md.trim()) box.appendChild(mailFrame(mdToHtml(s.md.slice(0, 400000)), false));
+      else if (s.text) box.appendChild(el("pre", null, s.text.slice(0, 200000)));
+      else if (kind === "hwp") note(box, "옛 한글 형식(.hwp)은 여기서 열 수 없습니다.");
+      else note(box, s.mdError ? "PC에서 이 파일을 읽지 못했습니다. (" + (s.mdError.code || "오류") + ")"
+        : "미리 볼 파일 내용을 받지 못했어요." + (s.blockTypes ? " (받은 내용: " + s.blockTypes + ")" : ""));
+      if (s.savedPath) note(box, "원본 파일은 PC의 " + s.savedPath + " 에 저장했습니다.");
+      return;
+    }
+    var job = null;
+    if (kind === "image"){ var img = document.createElement("img"); img.src = s.url; img.alt = a.name; box.appendChild(img); }
+    else if (kind === "pdf") job = renderPdf(box, s.blob);
+    else if (kind === "docx") job = renderDocx(box, s.blob);
+    else if (kind === "sheet") job = renderSheet(box, s.blob);
+    else if (kind === "pptx" || kind === "hwpx" || kind === "zip") job = renderZipText(box, s.blob, kind);
+    else if (kind === "html") job = s.blob.text().then(function(t){ box.appendChild(mailFrame(t, false)); });
+    else if (kind === "text") job = s.blob.text().then(function(t){ box.appendChild(el("pre", null, t.slice(0, 200000))); });
+    else if (kind === "audio" || kind === "video"){
+      var m = document.createElement(kind); m.controls = true; m.src = s.url; m.style.maxWidth = "100%"; box.appendChild(m);
+    }
+    else if (kind === "hwp") note(box, "옛 한글 형식(.hwp)은 여기서 열 수 없습니다. 파일로 저장해서 한글에서 열어 주세요.");
+    else note(box, "이 형식은 창 안에서 미리 볼 수 없습니다. 파일로 저장해서 열어 주세요.");
+    if (job){
+      var wait = el("span", "cap", "여는 중"); box.insertBefore(wait, box.firstChild);
+      job.then(function(){ wait.remove(); }, function(e){
+        wait.remove();
+        var why = e && (e.message || e.name) ? String(e.message || e.name).slice(0, 120) : "";
+        if (/lib|load|script/i.test(why) || /PDF 보기 프로그램/.test(why)) why = "보기 프로그램을 불러오지 못함 — " + why;
+        note(box, "이 파일을 창 안에서 열지 못했어요" + (why ? " (" + why + ")" : "") + ". 파일로 저장해서 열어 주세요.");
+      });
+    }
+  }
+
+  function attView(x, o, a){
+    var s = o.atts[a.key];
+    var v = el("div", "attview");
+    var vh = el("div", "vh");
+    vh.appendChild(el("b", null, a.name));
+    if (s.blob && downloads){
+      var sb = el("button", "btn", "파일로 저장"); sb.type = "button";
+      sb.addEventListener("click", function(){ saveAtt(a, s); });
+      vh.appendChild(sb);
+    }
+    var cl = el("button", "iconbtn", "✕"); cl.type = "button"; cl.title = "미리보기 닫기"; cl.setAttribute("aria-label", "미리보기 닫기");
+    cl.addEventListener("click", function(){ toggleAtt(x, o, a); });
+    vh.appendChild(cl);
+    v.appendChild(vh);
+    if (s.saveMsg) v.appendChild(el("span", "cap", s.saveMsg));
+    if (s.loading){ v.appendChild(el("span", "cap", "불러오는 중")); return v; }
+    if (s.error){
+      var msg = errorText(s.error, x.acc || "gmail");
+      if (s.error.code === "tool_error" && /12 ?MB|too large|large/i.test(s.error.message || "")) msg = "첨부파일이 너무 커서 여기서 열 수 없습니다. 메일 서비스에서 받아 주세요.";
+      v.appendChild(el("span", "cap bad", msg));
+      return v;
+    }
+    // 미리보기는 한 번만 만들고, 화면을 다시 그릴 때는 만든 것을 그대로 옮겨 붙인다
+    if (!s.node){ s.node = el("div", "attbody"); buildPreview(s.node, x, a, s); }
+    v.appendChild(s.node);
+    return v;
+  }
+
+  function errorText(e, account){
+    var name = ACC[account].label;
+    var code = e && e.code;
+    if (account !== "gmail"){
+      if (code === "server_not_connected" || code === "capability_disabled" || code === "not_granted")
+        return name + " 메일은 PC의 Claude 앱에서 이 페이지를 열었을 때만 불러올 수 있습니다. PC에서 Claude 앱이 켜져 있고 imap 연결이 실행 중인지 확인해 주세요. (" + code + ")";
+      if (code === "cancelled") return "PC에서 요청을 허용하지 않아 " + name + " 메일을 불러오지 않았습니다. 다시 시도하면 한 번 더 묻습니다.";
+      if (code === "not_in_manifest") return name + " 메일 연결이 이 페이지에 허용되어 있지 않습니다. 다시 시도해서 허용을 선택해 주세요.";
+      if (code === "tool_error") return name + " 메일 서버가 오류를 돌려줬습니다. 앱 비밀번호가 바뀌었거나 만료됐을 수 있습니다. (" + (e.message || "").slice(0, 120) + ")";
+    } else {
+      if (code === "needs_reauth") return "Gmail 연결이 만료됐습니다. claude.ai 설정의 커넥터에서 Gmail을 다시 연결해 주세요.";
+      if (code === "server_not_connected" || code === "selection_required") return "Gmail 커넥터가 연결되어 있지 않습니다. claude.ai 설정의 커넥터에서 Gmail을 추가해 주세요.";
+      if (code === "not_in_manifest" || code === "consent_required") return "이 페이지가 Gmail을 읽도록 허용되지 않았습니다. 다시 시도해서 허용을 선택해 주세요.";
+      if (code === "approval_required") return "Gmail을 읽으려면 승인이 필요합니다. 다시 시도를 눌러 승인해 주세요.";
+      if (code === "blocked_by_policy") return "조직 정책으로 이 페이지에서 이 Gmail 기능을 쓸 수 없게 막혀 있어요. claude.ai 조직 관리자에게 허용을 요청하거나 Gmail 웹사이트에서 해 주세요." + (e && e.message ? " (" + String(e.message).slice(0, 80) + ")" : "");
+      if (code === "tool_error") return "Gmail이 오류를 돌려줬습니다. (" + (e.message || "").slice(0, 120) + ")";
+    }
+    if (code === "server_unavailable" || code === "rate_limited") return name + " 메일 서버가 잠시 응답하지 않습니다. 조금 뒤에 다시 시도해 주세요.";
+    return name + " 메일을 불러오지 못했습니다. 다시 시도해 주세요." + (code ? " (" + code + ")" : "");
+  }
+
+  function fmtTime(ms, wide){
+    var d = new Date(ms);
+    var hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+    if (!wide) return hm;
+    return (d.getMonth() + 1) + "/" + d.getDate() + "(" + "일월화수목금토".charAt(d.getDay()) + ") " + hm;
+  }
+  function fmtFull(ms){
+    var d = new Date(ms);
+    return d.getFullYear() + "년 " + (d.getMonth() + 1) + "월 " + d.getDate() + "일 (" + "일월화수목금토".charAt(d.getDay()) + ") " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  var AV_COLORS = ["#3182F6", "#00A661", "#7B61FF", "#F04452", "#FF8A00", "#00A3C4", "#E2489C", "#5B6B7F"];
+  function avatar(name, cls){
+    var n = String(name || "?").replace(/^["'\s]+/, "");
+    var h = 0; for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+    var a = el("span", cls || "av", (n.charAt(0) || "?").toUpperCase());
+    a.style.setProperty("--c", AV_COLORS[h % AV_COLORS.length]);
+    a.setAttribute("aria-hidden", "true");
+    return a;
+  }
+  var EXT_COLORS = {pdf:"#F04452", docx:"#3182F6", doc:"#3182F6", xlsx:"#00A661", xls:"#00A661", csv:"#00A661", pptx:"#FF8A00", ppt:"#FF8A00", hwp:"#00A3C4", hwpx:"#00A3C4", zip:"#7B61FF"};
+  function catOf(key){ for (var i = 0; i < CATS.length; i++) if (CATS[i].key === key) return CATS[i]; return CATS[0]; }
+  function btn(text, cls, onClick){
+    var b = el("button", "btn" + (cls ? " " + cls : ""), text); b.type = "button";
+    if (onClick) b.addEventListener("click", onClick);
+    return b;
+  }
+
+  var sel = null;        // 읽기 창에 열린 메일
+  var readerSig = "";    // 읽기 창을 다시 그려야 하는지 판단 (본문 틀이 쓸데없이 다시 읽히지 않게)
+
+  function select(x){
+    sel = x;
+    toggle(x);
+    var r = $("reader"); if (r) r.scrollTop = 0;
+  }
+  function closeReader(){ sel = null; render(); }
+
+  // ---- 답장 작성 (팝업 창) ----
+  // 보내기는 되돌릴 수 없으므로 반드시 확인 단계를 거치고, 자동으로 다시 보내지 않는다.
+  var MAX_ATTACH = 25 * 1024 * 1024;
+  var MB = 1024 * 1024;
+  var DRIVE_MAX = 16 * MB;    // 파일 전용 통로로 한 번에 넘길 수 있는 크기 (Drive 업로드·큰 첨부)
+  var INLINE_MAX = 560 * 1024; // 호출 하나에 그대로 담아 보낼 첨부 합계 (호출 한도 1MB, base64로 커지는 것 감안)
+  var fileArgsP = null;        // 이 화면에서 파일 전용 통로를 쓸 수 있는지
+  function canSendFiles(){
+    if (!fileArgsP) fileArgsP = (mcp && mcp.listTools ? mcp.listTools() : Promise.reject()).then(function(r){ return !!(r && r.fileArgs); }, function(){ return false; });
+    return fileArgsP;
+  }
+  function fileArg(file){ return {$file: {data: file, name: file.name, type: file.type || "application/octet-stream"}}; }
+  function escHtml(t){ return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function textToHtml(t){ return escHtml(t).replace(/\r?\n/g, "<br>"); }
+  function splitAddrs(v){ return String(v || "").split(/[,;\s]+/).map(function(s){ return s.trim(); }).filter(Boolean); }
+  function validAddr(a){ return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(a); }
+  function readB64(file){
+    return new Promise(function(res, rej){
+      var r = new FileReader();
+      r.onload = function(){ var s = String(r.result || ""); res(s.slice(s.indexOf(",") + 1)); };
+      r.onerror = function(){ rej(r.error); };
+      r.readAsDataURL(file);
+    });
+  }
+
+  // ---- 서명·명함 ----
+  // 페이지 데이터베이스의 '나만 보는' 칸(data/users/<내 id>/signature)에 저장해 어느 기기에서 열어도 쓰고,
+  // 이 브라우저에도 사본을 둔다. 둘 다 안 되면 이 창을 닫기 전까지만 기억한다.
+  var SIG_KEY = "mailview_signature";
+  var sigCache = null, sigRef = null;
+  function cleanSig(v){ return v && typeof v === "object" ? {text: String(v.text || ""), img: String(v.img || "")} : null; }
+  function getSig(){
+    if (sigCache) return sigCache;
+    try{ var v = cleanSig(JSON.parse(localStorage.getItem(SIG_KEY) || "null")); if (v){ sigCache = v; return v; } }catch(e){}
+    return {text: "", img: ""};
+  }
+  function initSigStore(){
+    if (!(window.claude && typeof window.claude.use === "function")) return;
+    Promise.all([window.claude.use("db"), window.claude.use("user")]).then(function(r){
+      var db = r[0], user = r[1];
+      if (!db || !user) return null;
+      return user.id().then(function(id){
+        if (!id) return null;
+        sigRef = db.doc("data/users/" + id + "/signature");
+        return sigRef.get().then(function(snap){
+          var v = snap && snap.exists ? cleanSig(snap.data()) : null;
+          if (v){ sigCache = v; try{ localStorage.setItem(SIG_KEY, JSON.stringify(v)); }catch(e){} }
+        });
+      });
+    }).catch(function(){ /* 데이터베이스를 못 쓰면 브라우저 사본만 쓴다 */ });
+  }
+  // 저장 결과: "db"(어디서나), "local"(이 브라우저만), "memory"(창을 닫으면 사라짐)
+  function setSig(v){
+    sigCache = cleanSig(v);
+    var where = "memory";
+    try{ localStorage.setItem(SIG_KEY, JSON.stringify(sigCache)); where = "local"; }catch(e){}
+    if (!sigRef) return Promise.resolve(where);
+    return sigRef.set(sigCache).then(function(){ return "db"; }, function(){ return where; });
+  }
+  function hasSig(sg){ return !!((sg.text && sg.text.trim()) || sg.img); }
+  // 명함 사진은 가로 640px JPEG로 줄이고, 저장 한도(약 256KB)에 맞게 화질을 낮춘다
+  function shrinkImage(file){
+    return new Promise(function(res, rej){
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function(){
+        var w = Math.min(640, im.naturalWidth || 640), q = 0.88, d = "";
+        for (var tries = 0; tries < 8; tries++){
+          var h = Math.round((im.naturalHeight || 1) * w / (im.naturalWidth || 1));
+          var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+          var cx = cv.getContext("2d"); cx.fillStyle = "#FFFFFF"; cx.fillRect(0, 0, w, h); cx.drawImage(im, 0, 0, w, h);
+          d = cv.toDataURL("image/jpeg", q);
+          if (d.length < 180000) break;
+          if (q > 0.6) q -= 0.1; else w = Math.round(w * 0.8);
+        }
+        URL.revokeObjectURL(url);
+        if (d.length >= 180000) rej(new Error("too big")); else res(d);
+      };
+      im.onerror = function(){ URL.revokeObjectURL(url); rej(new Error("image")); };
+      im.src = url;
+    });
+  }
+
+  // 팝업 틀: 바깥을 어둡게 하고 가운데 창을 띄운다. Esc나 바깥 클릭은 onClose에 맡긴다.
+  function modal(title, onClose){
+    var ov = el("div", "overlay");
+    var win = el("div", "modal"); win.setAttribute("role", "dialog"); win.setAttribute("aria-modal", "true"); win.setAttribute("aria-label", title);
+    var hd = el("div", "mhead");
+    hd.appendChild(el("b", null, title));
+    var xb = el("button", "iconbtn", "✕"); xb.type = "button"; xb.title = "닫기"; xb.setAttribute("aria-label", "닫기");
+    xb.addEventListener("click", function(){ onClose(); });
+    hd.appendChild(xb);
+    win.appendChild(hd);
+    var body = el("div", "mbody"); win.appendChild(body);
+    ov.appendChild(win);
+    ov.addEventListener("mousedown", function(e){ if (e.target === ov) onClose(); });
+    ov.addEventListener("keydown", function(e){ if (e.key === "Escape"){ e.stopPropagation(); onClose(); } });
+    document.body.appendChild(ov);
+    return {ov: ov, win: win, body: body, head: hd, close: function(){ ov.remove(); }};
+  }
+
+  function askConfirm(message, okLabel, danger){
+    return new Promise(function(resolve){
+      var done = false;
+      var m = modal("확인", function(){ finish(false); });
+      function finish(v){ if (done) return; done = true; m.close(); resolve(v); }
+      m.win.classList.add("confirmwin");
+      m.body.appendChild(el("p", "askmsg", message));
+      var ft = el("div", "cfoot");
+      ft.appendChild(btn("취소", "", function(){ finish(false); }));
+      var ok = btn(okLabel || "확인", danger ? "danger solid" : "primary", function(){ finish(true); });
+      ft.appendChild(ok);
+      m.body.appendChild(ft);
+      setTimeout(function(){ try{ ok.focus(); }catch(e){} }, 30);
+    });
+  }
+
+  // ---- Drive에서 파일 고르기 ----
+  function driveIcon(mime, title){
+    var e = (/\.([a-z0-9]{2,5})$/i.exec(title || "") || [])[1];
+    if (/google-apps\.document/.test(mime)) return ["문서", "#3182F6"];
+    if (/google-apps\.spreadsheet/.test(mime)) return ["시트", "#00A661"];
+    if (/google-apps\.presentation/.test(mime)) return ["슬라", "#FF8A00"];
+    if (/pdf/.test(mime)) return ["PDF", "#F04452"];
+    if (/^image\//.test(mime)) return ["IMG", "#E2489C"];
+    if (/^video\//.test(mime)) return ["VID", "#7B61FF"];
+    return [(e || "file").toUpperCase().slice(0, 4), "#5B6B7F"];
+  }
+  function openDrivePicker(onPick){
+    var m = modal("Google Drive에서 파일 고르기", function(){ m.close(); });
+    var b = m.body;
+    var form = el("form", "searchbox"); form.setAttribute("role", "search");
+    var qi = el("input"); qi.type = "search"; qi.placeholder = "파일 이름으로 찾기 (비우면 최근 파일)"; qi.autocomplete = "off";
+    form.appendChild(qi); b.appendChild(form);
+    var list = el("div", "picklist"); b.appendChild(list);
+    b.appendChild(el("p", "cnote", "큰 파일은 먼저 Drive 웹사이트나 휴대폰 Drive 앱으로 올린 뒤 여기서 고르세요. 고른 파일은 보낼 때 공유 설정을 바꾸고 링크로 넣어요."));
+    var seq = 0;
+    function show(q){
+      var my = ++seq;
+      list.textContent = ""; list.appendChild(el("span", "cnote", "불러오는 중…"));
+      var call = q
+        ? readTool("Google Drive", "search_files", {query: "title contains '" + q.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "' and trashed = false", pageSize: 25, excludeContentSnippets: true, orderBy: "modifiedTime desc"})
+        : readTool("Google Drive", "list_recent_files", {pageSize: 25, excludeContentSnippets: true});
+      call.then(function(r){
+        if (my !== seq) return;
+        var files = ((r && r.payload && r.payload.files) || []).filter(function(fl){ return fl && fl.id && !/google-apps\.folder/.test(fl.mimeType || ""); });
+        list.textContent = "";
+        if (!files.length){ list.appendChild(el("span", "cnote", q ? "‘" + q + "’ 이름의 파일이 없어요." : "최근 파일이 없어요.")); return; }
+        files.forEach(function(fl){
+          var it = el("button", "pickitem driveitem"); it.type = "button";
+          var ic = driveIcon(fl.mimeType || "", fl.title || ""), fx = el("span", "fx", ic[0]); fx.style.setProperty("--c", ic[1]);
+          var tx = el("span", "dtx");
+          tx.appendChild(el("b", null, fl.title || "(이름 없음)"));
+          var mt = fl.modifiedTime ? new Date(fl.modifiedTime) : null;
+          tx.appendChild(el("span", null, (fl.fileSize ? fmtSize(Number(fl.fileSize)) + " · " : "") + (mt ? (mt.getMonth() + 1) + "/" + mt.getDate() + " 수정" : "") + (fl.owner && fl.readOnly ? " · 남의 파일" : "")));
+          it.appendChild(fx); it.appendChild(tx);
+          it.addEventListener("click", function(){
+            m.close();
+            onPick({id: fl.id, title: fl.title || "파일", size: fl.fileSize ? Number(fl.fileSize) : 0,
+                    url: fl.viewUrl || ("https://drive.google.com/file/d/" + fl.id + "/view")});
+          });
+          list.appendChild(it);
+        });
+      }, function(e){
+        if (my !== seq) return;
+        list.textContent = "";
+        list.appendChild(el("span", "status bad", e && e.code === "server_not_connected" ? "Google Drive 커넥터가 연결되어 있지 않아요. claude.ai 설정의 커넥터에서 Google Drive를 연결해 주세요." : "Drive 목록을 불러오지 못했어요. (" + ((e && e.code) || "오류") + ")"));
+      });
+    }
+    form.addEventListener("submit", function(e){ e.preventDefault(); show(qi.value.trim()); });
+    var tmr = null;
+    qi.addEventListener("input", function(){ clearTimeout(tmr); tmr = setTimeout(function(){ show(qi.value.trim()); }, 350); });
+    show("");
+    setTimeout(function(){ try{ qi.focus(); }catch(e){} }, 30);
+  }
+
+  function openSigManager(){
+    var sg = getSig();
+    var m = modal("서명·명함 관리", function(){ m.close(); });
+    var b = m.body;
+    b.appendChild(el("p", "cnote", "답장 끝에 붙는 서명이에요. 나만 볼 수 있게 저장되고, 모든 메일 계정에 같이 쓰여요."));
+    var ta = el("textarea", "csigbox"); ta.rows = 4; ta.value = sg.text || ""; ta.placeholder = "예)\n홍길동 드림\n010-0000-0000 · 이메일 주소";
+    b.appendChild(el("div", "sec-h", "서명 글"));
+    b.appendChild(ta);
+    b.appendChild(el("div", "sec-h", "명함 이미지"));
+    var drop = el("div", "dropzone");
+    var prev = el("div", "cardprev");
+    var fileIn = el("input"); fileIn.type = "file"; fileIn.accept = "image/*"; fileIn.hidden = true;
+    function draw(){
+      prev.textContent = "";
+      if (sg.img){
+        var im = document.createElement("img"); im.src = sg.img; im.alt = "명함"; prev.appendChild(im);
+        prev.appendChild(btn("명함 빼기", "danger", function(){ sg.img = ""; draw(); }));
+      }
+      drop.textContent = sg.img ? "다른 명함으로 바꾸려면 사진을 여기에 끌어다 놓거나 눌러서 고르세요" : "명함 사진을 여기에 끌어다 놓거나 눌러서 고르세요";
+    }
+    function take(file){
+      if (!file || !/^image\//.test(file.type)){ status.textContent = "사진 파일만 넣을 수 있어요."; return; }
+      status.textContent = "명함을 줄이는 중…";
+      shrinkImage(file).then(function(d){ sg.img = d; status.textContent = ""; draw(); }, function(e){ status.textContent = e && e.message === "too big" ? "사진이 너무 커요. 명함 부분만 잘라서 넣어 주세요." : "사진을 읽지 못했어요."; });
+    }
+    drop.addEventListener("click", function(){ fileIn.click(); });
+    fileIn.addEventListener("change", function(){ take(fileIn.files && fileIn.files[0]); fileIn.value = ""; });
+    ["dragenter", "dragover"].forEach(function(t){ drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.add("over"); }); });
+    ["dragleave", "drop"].forEach(function(t){ drop.addEventListener(t, function(){ drop.classList.remove("over"); }); });
+    drop.addEventListener("drop", function(e){ e.preventDefault(); take(e.dataTransfer.files && e.dataTransfer.files[0]); });
+    b.appendChild(drop); b.appendChild(fileIn); b.appendChild(prev);
+    var status = el("div", "cstatus"); b.appendChild(status);
+    var ft = el("div", "cfoot");
+    ft.appendChild(btn("취소", "", function(){ m.close(); }));
+    var saveBtn = btn("저장", "primary", function(){
+      sg.text = ta.value;
+      saveBtn.disabled = true; status.textContent = "저장하는 중…";
+      setSig(sg).then(function(where){
+        if (where === "memory"){
+          status.textContent = "저장소를 쓸 수 없어서 이 창을 닫기 전까지만 서명이 유지돼요.";
+          setTimeout(function(){ m.close(); }, 1600);
+        } else m.close();
+      });
+    });
+    ft.appendChild(saveBtn);
+    b.appendChild(ft);
+    draw();
+    setTimeout(function(){ ta.focus(); }, 30);
+  }
+
+  // ---- Gmail 주소록: 최근 주고받은 메일에서 이름·주소를 모은다 (보낸 메일에 가중치) ----
+  var contactsP = null;
+  function loadContacts(){
+    if (contactsP) return contactsP;
+    var map = {};
+    function add(addr, name, w){
+      addr = String(addr || "").trim().toLowerCase();
+      if (!validAddr(addr) || /no-?reply|noreply|mailer-daemon|notification|newsletter/i.test(addr)) return;
+      var c = map[addr] || (map[addr] = {addr: addr, name: "", score: 0});
+      if (name && !c.name && name.toLowerCase() !== addr) c.name = name;
+      c.score += w;
+    }
+    function harvest(r, w){
+      ((r.payload && r.payload.threads) || []).forEach(function(t){
+        (t.messages || []).forEach(function(m){
+          var names = {};
+          (m.addressDisplayNames || []).forEach(function(d){ if (d && d.emailAddress) names[String(d.emailAddress).toLowerCase()] = d.displayName || ""; });
+          var isSent = (m.labelIds || []).indexOf("SENT") !== -1;
+          [].concat(m.toRecipients || [], m.ccRecipients || []).forEach(function(a){ if (isSent) add(a, names[String(a).toLowerCase()], w); });
+          if (!isSent && m.sender) add(m.sender, names[String(m.sender).toLowerCase()], w / 3);
+        });
+      });
+      return r.payload && r.payload.nextPageToken;
+    }
+    function page(query, token, w, left){
+      var input = {query: query, pageSize: 50, view: "THREAD_VIEW_MINIMAL"};
+      if (token) input.pageToken = token;
+      return readTool("Gmail", "search_threads", input).then(function(r){
+        var next = harvest(r, w);
+        if (next && left > 1) return page(query, next, w, left - 1);
+      });
+    }
+    contactsP = Promise.all([
+      page("in:sent newer_than:2y", null, 3, 4),
+      page("newer_than:6m -category:promotions -category:social -in:sent", null, 1, 2)
+    ].map(function(p){ return p.catch(function(){}); })).then(function(){
+      return Object.keys(map).map(function(k){ return map[k]; }).sort(function(a, b){ return b.score - a.score; });
+    });
+    return contactsP;
+  }
+  // 받는 사람 칸 자동 완성: 쉼표 뒤 마지막 글자로 주소록을 찾아 아래에 띄운다
+  function attachSuggest(input){
+    var wrap = el("div", "sugwrap"); input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+    var box = el("ul", "sug"); box.hidden = true; box.setAttribute("role", "listbox"); wrap.appendChild(box);
+    var items = [], idx = -1;
+    function token(){ var v = input.value, i = Math.max(v.lastIndexOf(","), v.lastIndexOf(";")); return v.slice(i + 1).trim(); }
+    function pick(c){
+      var v = input.value, i = Math.max(v.lastIndexOf(","), v.lastIndexOf(";"));
+      input.value = (i >= 0 ? v.slice(0, i + 1) + " " : "") + c.addr + ", ";
+      box.hidden = true; input.focus();
+    }
+    function show(){
+      var q = token().toLowerCase();
+      if (q.length < 1){ box.hidden = true; return; }
+      loadContacts().then(function(list){
+        if (token().toLowerCase() !== q) return;
+        var already = splitAddrs(input.value.toLowerCase());
+        items = list.filter(function(c){ return already.indexOf(c.addr) === -1 && (c.addr.indexOf(q) !== -1 || (c.name && c.name.toLowerCase().indexOf(q) !== -1)); }).slice(0, 7);
+        box.textContent = ""; idx = -1;
+        items.forEach(function(c, i){
+          var li = el("li"); li.setAttribute("role", "option");
+          li.appendChild(avatar(c.name || c.addr, "av sm"));
+          var t = el("span", "st");
+          t.appendChild(el("b", null, c.name || c.addr));
+          if (c.name) t.appendChild(el("span", null, c.addr));
+          li.appendChild(t);
+          li.addEventListener("mousedown", function(e){ e.preventDefault(); pick(c); });
+          box.appendChild(li);
+        });
+        box.hidden = !items.length;
+      });
+    }
+    input.addEventListener("input", show);
+    input.addEventListener("focus", function(){ loadContacts(); });
+    input.addEventListener("blur", function(){ setTimeout(function(){ box.hidden = true; }, 120); });
+    input.addEventListener("keydown", function(e){
+      if (box.hidden || !items.length) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+        e.preventDefault();
+        idx = (idx + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        Array.prototype.forEach.call(box.children, function(li, i){ li.classList.toggle("on", i === idx); });
+      } else if ((e.key === "Enter" || e.key === "Tab") && idx >= 0){ e.preventDefault(); pick(items[idx]); }
+      else if (e.key === "Escape"){ e.stopPropagation(); box.hidden = true; }
+    });
+  }
+
+  function openComposer(x, o, all){
+    if (composerOpen) return;
+    composerOpen = true;
+    x.replyMsg = "";
+    buildComposer(x, o, all ? "all" : "one");
+  }
+  // 새 메일: 지금 보고 있는 계정(Gmail·카카오·네이버)에서 보낸다
+  function dropDrafts(){ Object.keys(store).forEach(function(k){ if (k.indexOf("|drafts|") !== -1) delete store[k]; }); }
+  function openNewMail(){
+    if (composerOpen || !mcp) return;
+    composerOpen = true;
+    buildComposer(null, null, "new");
+  }
+  function flash(text){
+    var host = toastHost();
+    var t = el("div", "toast"); t.setAttribute("role", "status");
+    var b = el("div", "tbody"); b.appendChild(el("b", null, text)); t.appendChild(b);
+    host.appendChild(t); setTimeout(function(){ t.classList.add("out"); setTimeout(function(){ t.remove(); }, 200); }, 4000);
+  }
+  var composerOpen = false;
+  var blockedTools = {};   // 조직 정책으로 막힌 Gmail 기능 (이 창을 연 동안 기억)
+
+  function buildComposer(x, o, mode, draft){
+    var isNew = mode === "new" || mode === "draft", isFwd = mode === "fwd", isDraftMode = mode === "draft";
+    var acc = isDraftMode ? "gmail" : isNew ? (state.account === "all" ? "gmail" : state.account) : (x.acc || "gmail"), isG = acc === "gmail";
+    var last = isNew ? {} : (o.msgs[o.msgs.length - 1] || {});
+    var c = {busy: false, files: [], confirming: false, driveLinks: []};
+    canSendFiles().then(function(ok){ c.noFileArgs = !ok; });
+    var sg = getSig();
+    var subj = isNew ? "" : isFwd ? (/^fwd?:/i.test(x.subject) ? x.subject : "Fwd: " + x.subject) : (/^re:/i.test(x.subject) ? x.subject : "Re: " + x.subject);
+
+    var m = modal(isDraftMode ? "임시보관함 이어 쓰기" : isNew ? "새 메일" : isFwd ? "전달" : mode === "all" ? "전체 답장" : "답장", tryClose);
+    var box = m.body;
+    m.win.classList.add("composewin");
+    function tryClose(){
+      if (c.busy) return;
+      var dirty = ta.value.trim() || c.files.length || (subjIn && subjIn.value.trim());
+      if (!dirty){ m.close(); composerOpen = false; return; }
+      askConfirm(isNew ? "쓰던 메일을 지울까요?" : "쓰던 내용을 지울까요?", "지우고 닫기", true).then(function(ok){ if (ok){ m.close(); composerOpen = false; } });
+    }
+
+    // 받는 사람
+    if (isNew && !isDraftMode){
+      var fr = el("label", "cfield"); fr.appendChild(el("span", null, "보내는 계정"));
+      var fromSel = el("select", "sharesel");
+      ["gmail", "kakao", "naver"].forEach(function(a){ var op = el("option", null, ACC[a].label); op.value = a; if (a === acc) op.selected = true; fromSel.appendChild(op); });
+      fromSel.addEventListener("change", function(){
+        acc = fromSel.value; isG = acc === "gmail"; mailLimit = (isG ? 25 : 10) * MB;
+        if (gSig){ gSig.parentNode.hidden = !isG; if (!isG) gSig.checked = false; }
+        drawFiles(); drawFoot();
+      });
+      fr.appendChild(fromSel); box.appendChild(fr);
+    }
+    var defTo = (isNew || isFwd) ? "" : isG ? (last.addr || "") : (x.fromAddr || "");
+    var toIn = null, ccIn = null, subjIn = null;
+    if (isG || isNew || isFwd){
+      var r1 = el("label", "cfield"); r1.appendChild(el("span", null, "받는 사람"));
+      toIn = el("input"); toIn.type = "text"; toIn.value = defTo ? defTo + ", " : ""; toIn.autocomplete = "off"; toIn.spellcheck = false;
+      r1.appendChild(toIn); box.appendChild(r1); attachSuggest(toIn);
+      var r2 = el("label", "cfield"); r2.appendChild(el("span", null, "참조"));
+      ccIn = el("input"); ccIn.type = "text"; ccIn.autocomplete = "off"; ccIn.spellcheck = false;
+      ccIn.placeholder = mode === "all" ? "비워 두면 원래 받은 사람들이 그대로 참조돼요" : "이름이나 주소를 쓰면 주소록에서 찾아 줘요";
+      if (isNew || isFwd) toIn.placeholder = "이름이나 주소를 쓰면 Gmail 주소록에서 찾아 줘요";
+      if (isFwd && !isG){ r2.hidden = true; }
+      r2.appendChild(ccIn); box.appendChild(r2); attachSuggest(ccIn);
+    } else {
+      box.appendChild(el("div", "cfield ro", "")).appendChild(el("span", null, "받는 사람"));
+      box.lastChild.appendChild(el("b", null, mode === "all" ? x.from + " 외 원래 받은 사람들" : x.from + (x.fromAddr ? " <" + x.fromAddr + ">" : "")));
+      box.appendChild(el("div", "cnote", ACC[acc].label + " 메일은 받는 사람을 바꿀 수 없어요. 원래 메일의 보낸 사람에게 답장돼요."));
+    }
+    if (isNew){
+      var sr0 = el("label", "cfield"); sr0.appendChild(el("span", null, "제목"));
+      subjIn = el("input"); subjIn.type = "text"; subjIn.autocomplete = "off"; subjIn.placeholder = "제목";
+      sr0.appendChild(subjIn); box.appendChild(sr0);
+    } else {
+      var sr = el("div", "cfield ro"); sr.appendChild(el("span", null, "제목")); sr.appendChild(el("b", null, subj)); box.appendChild(sr);
+    }
+
+    var ta = el("textarea", "cbody"); ta.rows = 10; ta.placeholder = (isNew ? "내용을 쓰세요." : isFwd ? "전달하면서 덧붙일 말 (원래 메일과 첨부는 아래에 함께 가요)" : "답장 내용을 쓰세요.") + " 파일은 이 창에 끌어다 놓으면 첨부돼요.";
+    // AI 초안
+    var air = el("div", "airow");
+    var aiIn = el("input"); aiIn.type = "text"; aiIn.placeholder = isNew ? "AI에게: 예) 다음 주 화요일 현장 미팅 요청, 정중하게" : "AI에게: 예) 일정 확인했다고 짧게, 견적은 다음 주에 보낸다고";
+    var aiBtn = btn("AI 초안", "ai", function(){
+      if (!aiIn.value.trim()){ aiIn.focus(); return; }
+      aiBtn.disabled = true;
+      aiDraft(aiIn.value.trim(), (x && o) ? "제목: " + x.subject + "\n" + plainOf(o).slice(0, 8000) : "", ta, setStatus).then(function(){ aiBtn.disabled = false; });
+    });
+    aiIn.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); aiBtn.click(); } });
+    air.appendChild(aiIn); air.appendChild(aiBtn);
+    box.appendChild(air);
+    box.appendChild(ta);
+    if (isDraftMode && draft){
+      toIn.value = (draft.to || []).join(", ") + ((draft.to || []).length ? ", " : "");
+      ccIn.value = (draft.cc || []).join(", ");
+      subjIn.value = draft.subject === "(제목 없음)" ? "" : draft.subject;
+      ta.value = draft.body || "";
+    }
+    if (isFwd && !isG) box.appendChild(el("div", "cnote", ACC[acc].label + " 메일 전달은 원래 첨부를 함께 보내요. 새 파일 첨부와 명함 그림은 넣을 수 없어요."));
+
+    // 서명
+    var sigRow = el("div", "csig");
+    function chk(label, on){
+      var l = el("label", "chk"); var i = el("input"); i.type = "checkbox"; i.checked = on;
+      l.appendChild(i); l.appendChild(el("span", null, label)); sigRow.appendChild(l); return i;
+    }
+    var mySig = chk(hasSig(sg) ? "내 서명" + (sg.img ? "·명함" : "") + " 붙이기" : "내 서명 붙이기 (아직 없음)", hasSig(sg));
+    mySig.disabled = !hasSig(sg);
+    var gSig = (isG || isNew) ? chk("Gmail 서명 붙이기", isG && !hasSig(sg)) : null;
+    if (gSig && !isG) gSig.parentNode.hidden = true;
+    mySig.addEventListener("change", function(){ if (typeof drawFiles === "function") drawFiles(); });
+    var edit = el("button", "linkbtn", "서명·명함 관리"); edit.type = "button";
+    edit.addEventListener("click", function(){
+      openSigManager();
+      // 관리 창을 닫으면 새 서명을 다시 읽는다
+      var watch = setInterval(function(){
+        if (document.querySelectorAll(".overlay").length > 1) return;
+        clearInterval(watch); sg = getSig();
+        mySig.disabled = !hasSig(sg);
+        if (hasSig(sg)){ mySig.checked = true; if (gSig) gSig.checked = false; }   // 서명이 두 번 붙지 않게
+        mySig.nextSibling.textContent = hasSig(sg) ? "내 서명" + (sg.img ? "·명함" : "") + " 붙이기" : "내 서명 붙이기 (아직 없음)";
+      }, 300);
+    });
+    sigRow.appendChild(edit);
+    box.appendChild(sigRow);
+
+    // 첨부: 끌어다 놓기 + 고르기
+    var fileIn = el("input"); fileIn.type = "file"; fileIn.multiple = true; fileIn.hidden = true;
+    var fileBar = el("div", "cfiles");
+    var addBtn = btn("파일 고르기", "", function(){ fileIn.click(); });
+    var driveBtn = btn("Drive 파일 넣기", "", function(){
+      openDrivePicker(function(df){
+        if (!c.driveLinks.some(function(d){ return d.id === df.id; })) c.driveLinks.push(df);
+        drawFiles(); drawFoot();
+      });
+    });
+    var mailLimit = (isG ? 25 : 10) * MB;
+    // 파일마다 보내는 길을 정한다
+    //  - inline: 메일 호출에 그대로 담는다 (작은 파일, 합계 INLINE_MAX까지)
+    //  - big:    Gmail 첨부 중 하나는 파일 전용 통로로 (16MB까지, 한 번에 하나만 가능)
+    //  - stage:  카카오·네이버는 PC 도우미에 하나씩 넘겨 저장한 뒤 imap이 파일로 붙인다
+    //  - drive:  나머지는 Google Drive에 올리고 링크로
+    function plan(){
+      var cardSize = (mySig && mySig.checked && sg.img) ? sg.img.length * 0.75 : 0;
+      var files = c.files.slice().sort(function(a, b){ return a.size - b.size; });
+      var mode = new Map(), mail = [], drive = [], total = cardSize, inl = cardSize, bigUsed = false;
+      var imapFwd = isFwd && !isG;
+      files.forEach(function(f){
+        if (imapFwd){ mail.push(f); mode.set(f, "inline"); return; }   // 검사에서 막는다
+        if (total + f.size > mailLimit * 0.95){ drive.push(f); return; }
+        if (inl + f.size <= INLINE_MAX){ mail.push(f); mode.set(f, "inline"); inl += f.size; total += f.size; return; }
+        if (isG && !bigUsed && f.size <= DRIVE_MAX){ mail.push(f); mode.set(f, "big"); bigUsed = true; total += f.size; return; }
+        if (!isG && f.size <= DRIVE_MAX){ mail.push(f); mode.set(f, "stage"); total += f.size; return; }
+        drive.push(f);
+      });
+      var pcDrive = drive.filter(function(f){ return f.size > DRIVE_MAX; });
+      drive = drive.filter(function(f){ return f.size <= DRIVE_MAX; });
+      return {mail: mail, drive: drive, pcDrive: pcDrive, mode: mode,
+              needsFiles: mail.some(function(f){ return mode.get(f) !== "inline"; }) || drive.length > 0 || pcDrive.length > 0};
+    }
+    function drawFiles(){
+      fileBar.textContent = "";
+      var pl = plan();
+      var total = 0;
+      c.files.forEach(function(f, i){
+        total += f.size;
+        var chip = el("span", "fchip");
+        chip.appendChild(el("span", null, f.name + " · " + fmtSize(f.size)));
+        if (pl.drive.indexOf(f) !== -1){ chip.classList.add("drive"); chip.appendChild(el("em", null, "Drive 링크")); }
+        if (pl.pcDrive.indexOf(f) !== -1){
+          var rcOk = c.rcStatus && c.rcStatus.ok;
+          chip.classList.add(rcOk ? "drive" : "toobig"); chip.appendChild(el("em", null, rcOk ? "Drive 링크" : "Gmail에서"));
+        }
+        var rm = el("button", null, "✕"); rm.type = "button"; rm.title = f.name + " 빼기"; rm.setAttribute("aria-label", f.name + " 빼기");
+        rm.addEventListener("click", function(){ if (!c.busy){ c.files.splice(i, 1); drawFiles(); } });
+        chip.appendChild(rm);
+        fileBar.appendChild(chip);
+      });
+      c.driveLinks.forEach(function(d, i){
+        var chip = el("span", "fchip drive");
+        chip.appendChild(el("span", null, d.title + (d.size ? " · " + fmtSize(d.size) : "")));
+        chip.appendChild(el("em", null, "Drive"));
+        var rm = el("button", null, "✕"); rm.type = "button"; rm.title = d.title + " 빼기"; rm.setAttribute("aria-label", d.title + " 빼기");
+        rm.addEventListener("click", function(){ if (!c.busy){ c.driveLinks.splice(i, 1); drawFiles(); } });
+        chip.appendChild(rm);
+        fileBar.appendChild(chip);
+      });
+      fileBar.appendChild(addBtn);
+      fileBar.appendChild(driveBtn);
+      if (!c.files.length && !c.driveLinks.length) fileBar.appendChild(el("span", "cnote", "또는 파일을 이 창에 끌어다 놓으세요"));
+      driveRow.hidden = !pl.drive.length && !c.driveLinks.length && !(pl.pcDrive.length && c.rcStatus && c.rcStatus.ok);
+      if (!pl.drive.length && c.driveLinks.length) driveNote.textContent = "Drive에서 고른 파일 " + c.driveLinks.length + "개는 공유 설정을 하고 본문에 링크를 넣어 보내요.";
+      if (pl.drive.length) driveNote.textContent = "메일에 바로 붙이기 어려운 큰 파일 " + pl.drive.length + "개는 내 Google Drive에 올리고 본문에 링크를 넣어 보내요." + (isG ? " (Gmail은 큰 첨부를 한 개까지 바로 붙일 수 있어요)" : "");
+      if (pl.pcDrive.length && !c.rcStatus){
+        // PC에 rclone이 연결돼 있으면 큰 파일도 여기서 바로 Drive 링크로 보낸다
+        c.rcStatus = {checking: true};
+        mcp.callTool("host:attachments", "rclone_status", {}, {cache: false}).then(function(r){
+          var p = (r && r.payload) || {}; c.rcStatus = {ok: !!p.ok, reason: p.reason || ""};
+        }, function(){ c.rcStatus = {ok: false, reason: "PC 첨부 도우미 새 버전이 필요해요 (Claude 앱 다시 시작)"}; }).then(function(){ drawFiles(); });
+      }
+      if (pl.pcDrive.length && c.rcStatus && (c.rcStatus.ok || c.rcStatus.checking)){
+        fileBar.appendChild(el("span", "status", c.rcStatus.checking ? "큰 파일을 보낼 준비를 확인하는 중…" : "16MB 넘는 파일은 PC에서 Google Drive로 바로 올린 뒤 링크로 보내요. 올라가는 동안 이 창을 열어 두세요."));
+      } else if (pl.pcDrive.length){
+        var gw = el("div", "gmailweb");
+        if (c.rcStatus && c.rcStatus.reason) gw.appendChild(el("span", "status bad", c.rcStatus.reason));
+        gw.appendChild(el("span", null, "16MB가 넘는 파일(" + pl.pcDrive.map(function(x){ return x.name; }).join(", ") + ")은 이 화면에서 보낼 수 없어요. Gmail 웹 작성 창을 열어 드릴게요 — 받는 사람·제목·본문은 채워져 있으니 파일만 끌어다 놓으면 Gmail이 Drive 링크로 보내요." +
+          (isG ? "" : " (Gmail 계정으로 보내져요)") + (!isNew && !isFwd ? " 기존 대화에 이어지지 않고 새 메일로 가요." : "")));
+        var ga = el("a", "btn primary", "Gmail에서 이어 쓰기"); ga.target = "_blank"; ga.rel = "noopener noreferrer"; ga.href = gmailComposeUrl();
+        ga.addEventListener("click", function(){ ga.href = gmailComposeUrl(); });   // 누르는 순간의 내용으로
+        gw.appendChild(ga);
+        fileBar.appendChild(gw);
+      }
+    }
+    function addFiles(list){ Array.prototype.forEach.call(list || [], function(f){ if (f && f.size >= 0) c.files.push(f); }); drawFiles(); }
+    fileIn.addEventListener("change", function(){ addFiles(fileIn.files); fileIn.value = ""; });
+    var dragDepth = 0;
+    m.win.addEventListener("dragenter", function(e){ if (!c.busy && e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") !== -1){ e.preventDefault(); dragDepth++; m.win.classList.add("dropping"); } });
+    m.win.addEventListener("dragover", function(e){ if (m.win.classList.contains("dropping")){ e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+    m.win.addEventListener("dragleave", function(){ if (--dragDepth <= 0){ dragDepth = 0; m.win.classList.remove("dropping"); } });
+    m.win.addEventListener("drop", function(e){ e.preventDefault(); dragDepth = 0; m.win.classList.remove("dropping"); if (!c.busy) addFiles(e.dataTransfer.files); });
+    var dropHint = el("div", "drophint", "여기에 놓으면 첨부돼요"); m.win.appendChild(dropHint);
+    box.appendChild(fileIn);
+    box.appendChild(fileBar);
+    var driveRow = el("div", "driverow"); driveRow.hidden = true;
+    var driveNote = el("span", "cnote"); driveRow.appendChild(driveNote);
+    var shareSel = el("select", "sharesel");
+    [["link", "링크가 있는 사람 누구나 보기"], ["people", "받는 사람만 보기 (상대에게 Google 계정 필요)"]].forEach(function(o2){
+      var op = el("option", null, o2[1]); op.value = o2[0]; shareSel.appendChild(op);
+    });
+    var shl = el("label", "cfield"); shl.appendChild(el("span", null, "링크 공유")); shl.appendChild(shareSel);
+    driveRow.appendChild(shl);
+    box.appendChild(driveRow);
+    drawFiles();
+
+    var status = el("div", "cstatus"); box.appendChild(status);
+    var foot = el("div", "cfoot"); box.appendChild(foot);
+    function setStatus(t, cls){ status.textContent = t || ""; status.className = "cstatus" + (cls ? " " + cls : ""); }
+
+    function gmailComposeUrl(){
+      var g = gather();
+      var to = g.to.length ? g.to : (x && x.fromAddr && !isNew && !isFwd ? [x.fromAddr] : []);
+      var subjText = g.subject || subj || "";
+      var p = ["view=cm", "fs=1"];
+      if (to.length) p.push("to=" + encodeURIComponent(to.join(",")));
+      if (g.cc.length) p.push("cc=" + encodeURIComponent(g.cc.join(",")));
+      if (subjText) p.push("su=" + encodeURIComponent(subjText));
+      var body = g.text;
+      if (body.length > 6000) body = body.slice(0, 6000) + "\n…";   // 주소 길이 제한
+      if (body) p.push("body=" + encodeURIComponent(body));
+      return "https://mail.google.com/mail/?" + p.join("&");
+    }
+    function gather(){
+      var text = ta.value.replace(/\s+$/, "");
+      var useMine = mySig.checked && hasSig(sg);
+      var sigText = useMine && sg.text ? sg.text.trim() : "";
+      var full = text + (useMine && sigText ? "\n\n-- \n" + sigText : "");
+      var card = useMine && sg.img ? sg.img : "";
+      var to = toIn ? splitAddrs(toIn.value) : [];
+      var cc = ccIn ? splitAddrs(ccIn.value) : [];
+      return {text: full, body: text, sigText: sigText, card: card, to: to, cc: cc, subject: subjIn ? subjIn.value.trim() : subj,
+              toChanged: toIn ? to.join(",").toLowerCase() !== splitAddrs(defTo).join(",").toLowerCase() : false};
+    }
+    // HTML 본문: 글 + 서명 + (명함은 메일 안에 넣는 첨부 그림으로)
+    function htmlOf(g, cardRef){
+      return '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#191F28">' + textToHtml(g.body) + (g.bodyHtmlExtra || "") +
+        (g.sigText || cardRef ? '<br><br><div style="color:#4E5968;font-size:13px">' + (g.sigText ? textToHtml(g.sigText) : "") +
+          (cardRef ? '<br><img src="' + cardRef + '" alt="명함" style="max-width:360px;width:100%;border:1px solid #E5E8EB;border-radius:8px;margin-top:8px">' : "") + "</div>" : "") +
+        "</div>";
+    }
+    function check(g, forDraft){
+      if (!ta.value.trim() && !c.files.length && !c.driveLinks.length) return isNew ? "내용을 써 주세요." : "답장 내용을 써 주세요.";
+      if (isNew && !g.subject && !forDraft) return "제목을 써 주세요.";
+      if (isFwd && !g.to.length) return "받는 사람을 넣어 주세요.";
+      if (isFwd && !isG && c.files.length) return "카카오·네이버 전달에는 새 파일을 붙일 수 없어요. 파일을 빼 주세요.";
+      if (isG || isNew || isFwd){
+        if (!g.to.length && !forDraft) return "받는 사람을 넣어 주세요.";
+        var bad = g.to.concat(g.cc).filter(function(a){ return !validAddr(a); });
+        if (bad.length) return "주소를 확인해 주세요: " + bad.join(", ");
+      }
+      var total = c.files.reduce(function(s, f){ return s + f.size; }, 0);
+      var pl0 = plan();
+      if (pl0.pcDrive.length && c.rcStatus && c.rcStatus.checking) return "큰 파일을 보낼 준비를 확인하는 중이에요. 잠시 뒤 다시 눌러 주세요.";
+      if (pl0.pcDrive.length && !(c.rcStatus && c.rcStatus.ok)) return "16MB가 넘는 파일은 이 화면에서 보낼 수 없어요. 아래 'Gmail에서 이어 쓰기'를 눌러 Gmail 웹에서 파일을 넣어 보내 주세요.";
+      if (pl0.needsFiles && c.noFileArgs) return "이 화면에서는 큰 첨부를 보낼 수 없어요. 합쳐서 500KB 이하로 줄이거나 Claude 앱을 업데이트해 주세요.";
+      if ((plan().drive.length || plan().pcDrive.length || c.driveLinks.length) && shareSel.value === "people"){
+        var known = isG || isNew || isFwd ? g.to.concat(g.cc) : (x && x.fromAddr ? [x.fromAddr] : []);
+        if (!known.length) return "받는 사람 주소를 알 수 없어 '받는 사람만 보기'로 공유할 수 없어요. '링크가 있는 사람 누구나'를 골라 주세요.";
+      }
+      return "";
+    }
+    function driveUpload(g){
+      var pl3 = plan(), list = pl3.drive, picked = c.driveLinks.slice(), bigs = pl3.pcDrive.slice();
+      if (!list.length && !picked.length && !bigs.length) return Promise.resolve(g);
+      var who = (isG || isNew || isFwd) ? g.to.concat(g.cc) : (x && x.fromAddr ? [x.fromAddr] : []);
+      var links = [], warns = [], i = 0, total = list.length + picked.length + bigs.length, n = 0;
+      // 공유: '받는 사람만'이면 한 명씩, 아니면 링크가 있는 누구나
+      function share(id, url){
+        if (shareSel.value === "people")
+          return who.reduce(function(pr, addr){ return pr.then(function(){ return mcp.callTool("Google Drive", "share_file", {fileId: id, emailAddress: addr, role: "reader"}, {cache: false}); }); }, Promise.resolve()).then(function(){ return url; });
+        return mcp.callTool("Google Drive", "share_file", {fileId: id, permissionId: "anyoneWithLink", role: "reader"}, {cache: false}).then(function(sr){
+          var sp = (sr && sr.payload) || {}; return sp.shareableLink || url;
+        });
+      }
+      function nextUpload(){
+        if (i >= list.length) return Promise.resolve();
+        var file = list[i++]; n++;
+        setStatus("Google Drive에 올리는 중… (" + n + "/" + total + ") " + file.name);
+        return mcp.callTool("Google Drive", "create_file", {title: file.name, base64Content: fileArg(file),
+            contentMimeType: file.type || "application/octet-stream", disableConversionToGoogleType: true}, {cache: false}).then(function(r){
+          var p = (r && r.payload) || {};
+          var id = p.id || (p.file && p.file.id);
+          if (!id) throw {code: "tool_error", message: "Drive가 파일 id를 돌려주지 않았어요"};
+          var url = p.webViewLink || p.viewUrl || p.alternateLink || p.url || ("https://drive.google.com/file/d/" + id + "/view");
+          return share(id, url).then(function(u){ links.push({name: file.name, size: file.size, url: u}); });
+        }).then(nextUpload);
+      }
+      function nextPicked(){
+        if (!picked.length) return Promise.resolve();
+        var d = picked.shift(); n++;
+        setStatus("Drive 파일 공유 설정 중… (" + n + "/" + total + ") " + d.title);
+        // 남의 파일처럼 공유를 바꿀 수 없으면 링크만 넣고 알려 준다
+        return share(d.id, d.url).then(function(u){ links.push({name: d.title, size: d.size, url: u}); },
+          function(){ warns.push(d.title); links.push({name: d.title, size: d.size, url: d.url}); }).then(nextPicked);
+      }
+      // 16MB 넘는 파일: 15MB 조각으로 PC 도우미에 넘겨 Drive 폴더에 넣고, Drive 앱이 다 올리면 찾아서 공유한다
+      var CHUNK = 15 * 1024 * 1024;
+      c.pcDone = c.pcDone || new Map();
+      function sendPieces(file){
+        if (c.pcDone.get(file)) return Promise.resolve(c.pcDone.get(file));   // 다시 보낼 때 또 올리지 않는다
+        var pieces = Math.max(1, Math.ceil(file.size / CHUNK)), uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8), k = 0;
+        function one(){
+          var part = file.slice(k * CHUNK, Math.min(file.size, (k + 1) * CHUNK));
+          setStatus("PC로 넘기는 중… " + file.name + " (" + (k + 1) + "/" + pieces + ")");
+          return mcp.callTool("host:attachments", "stage_chunk", {uploadId: uid, index: k, total: pieces, name: file.name, dest: "rclone",
+              base64Content: {$file: {data: part, name: file.name, type: file.type || "application/octet-stream"}}}, {cache: false}).then(function(r){
+            var p = (r && r.payload) || {};
+            k++;
+            if (p.done){ var info = {jobId: p.jobId, size: p.size || file.size}; c.pcDone.set(file, info); return info; }
+            if (k >= pieces) throw {code: "tool_error", message: "조각을 다 보냈는데 파일이 완성되지 않았어요"};
+            return one();
+          });
+        }
+        return one();
+      }
+      // rclone이 Drive에 다 올릴 때까지 진행률을 보여 주며 기다린다
+      function waitInDrive(info, file){
+        var started = Date.now();
+        function poll(){
+          return mcp.callTool("host:attachments", "upload_status", {jobId: info.jobId}, {cache: false}).then(function(r){
+            var j = (r && r.payload) || {};
+            if (j.state === "done" && j.id) return {id: j.id, viewUrl: "https://drive.google.com/file/d/" + j.id + "/view"};
+            if (j.state === "failed"){ c.pcDone.delete(file); throw {code: "tool_error", server: "host:attachments", message: "Drive에 올리지 못했어요: " + (j.error || "알 수 없는 오류")}; }
+            var sec = Math.round((Date.now() - started) / 1000);
+            setStatus("Google Drive에 올리는 중… " + file.name + " " + (j.percent || 0) + "% (" + (sec >= 60 ? Math.floor(sec / 60) + "분 " : "") + (sec % 60) + "초) — 창을 닫지 마세요");
+            return new Promise(function(res){ setTimeout(res, 2000); }).then(poll);
+          }, function(e){
+            if (e && /unknown upload job/i.test(e.message || "")){ c.pcDone.delete(file); throw {code: "tool_error", server: "host:attachments", message: "PC 도우미가 다시 시작돼 업로드가 끊겼어요. 다시 보내 주세요."}; }
+            throw e;
+          });
+        }
+        return poll();
+      }
+      function nextBig(){
+        if (!bigs.length) return Promise.resolve();
+        var file = bigs.shift(); n++;
+        return sendPieces(file).then(function(info){ return waitInDrive(info, file); }).then(function(fl){
+          var url = fl.viewUrl || ("https://drive.google.com/file/d/" + fl.id + "/view");
+          return share(fl.id, url).then(function(u){ links.push({name: file.name, size: file.size, url: u}); });
+        }).then(nextBig);
+      }
+      return nextUpload().then(nextBig).then(nextPicked).then(function(){
+        if (warns.length) c.driveWarn = "공유 설정을 바꾸지 못한 Drive 파일: " + warns.join(", ") + " (받는 사람이 못 열 수 있어요)";
+        var txt = "\n\n[Google Drive 첨부]\n" + links.map(function(l){ return "· " + l.name + (l.size ? " (" + fmtSize(l.size) + ")" : "") + ": " + l.url; }).join("\n");
+        var html = '<div style="margin-top:14px;padding:12px 14px;border:1px solid #E5E8EB;border-radius:10px;font-size:13px">' +
+          '<div style="font-weight:700;margin-bottom:6px">Google Drive 첨부</div>' +
+          links.map(function(l){ return '<div>📎 <a href="' + escHtml(l.url) + '">' + escHtml(l.name) + '</a>' + (l.size ? ' <span style="color:#8B95A1">(' + fmtSize(l.size) + ')</span>' : "") + '</div>'; }).join("") + "</div>";
+        return {text: g.text.replace(/(\n\n-- \n[\s\S]*)?$/, function(sig){ return txt + (sig || ""); }), body: g.body, bodyHtmlExtra: html,
+                sigText: g.sigText, card: g.card, to: g.to, cc: g.cc, subject: g.subject, toChanged: g.toChanged, driveCount: links.length};
+      });
+    }
+    function attachPayload(){
+      var pl = plan(), i = 0, out = [];
+      var staged = pl.mail.filter(function(f){ return pl.mode.get(f) === "stage"; }).length, n = 0;
+      function next(){
+        if (i >= pl.mail.length) return Promise.resolve(out);
+        var f = pl.mail[i++], m = pl.mode.get(f);
+        if (m === "big"){     // Gmail: 이 파일 하나는 파일 전용 통로로
+          out.push({content: fileArg(f), filename: f.name, mimeType: f.type || "application/octet-stream"});
+          return next();
+        }
+        if (m === "stage"){   // 카카오·네이버: PC에 잠시 저장하고 경로로 붙인다
+          n++; setStatus("첨부를 준비하는 중… (" + n + "/" + staged + ") " + f.name);
+          return mcp.callTool("host:attachments", "stage_file", {name: f.name, base64Content: fileArg(f)}, {cache: false}).then(function(r){
+            var p = (r && r.payload) || {};
+            if (!p.path) throw {code: "tool_error", message: "첨부를 PC에 준비하지 못했어요"};
+            out.push({filename: f.name, path: p.path, contentType: f.type || undefined});
+            return next();
+          });
+        }
+        return readB64(f).then(function(b64){
+          out.push(isG ? {content: b64, filename: f.name, mimeType: f.type || "application/octet-stream"}
+                       : {content: b64, filename: f.name, contentType: f.type || undefined});
+          return next();
+        });
+      }
+      return next();
+    }
+    // 명함을 메일 안에 넣는 첨부로 만든다 (Gmail: cid:attN, imap: cid 지정)
+    function withCard(g, atts){
+      if (!g.card) return {atts: atts, html: htmlOf(g, "")};
+      var b64 = g.card.slice(g.card.indexOf(",") + 1);
+      if (isG){
+        var n = atts.length;
+        return {atts: atts.concat([{content: b64, filename: "명함.jpg", mimeType: "image/jpeg", inline: true}]), html: htmlOf(g, "cid:att" + n)};
+      }
+      return {atts: atts.concat([{content: b64, filename: "명함.jpg", contentType: "image/jpeg", contentDisposition: "inline", cid: "bizcard"}]), html: htmlOf(g, "cid:bizcard")};
+    }
+    function lock(on){
+      c.busy = on;
+      [ta, toIn, ccIn, subjIn, mySig, gSig, addBtn, driveBtn, typeof fromSel !== "undefined" ? fromSel : null].forEach(function(n){ if (n) n.disabled = on || (n === mySig && !hasSig(sg)); });
+    }
+    function drawFoot(){
+      foot.textContent = "";
+      if (c.confirming){
+        var g = gather();
+        var who = (isG || isNew || isFwd) ? (g.to.join(", ") + (g.cc.length ? " (참조 " + g.cc.join(", ") + ")" : (mode === "all" ? " 외 원래 받은 사람들" : "")))
+                      : (mode === "all" ? x.from + "님과 원래 받은 사람들" : x.from + "님");
+        var cf = el("div", "confirm");
+        var pl2 = plan();
+        cf.appendChild(el("span", null, who + "에게 보냅니다" + (pl2.mail.length ? " · 첨부 " + pl2.mail.length + "개" : "") +
+          (pl2.drive.length + pl2.pcDrive.length + c.driveLinks.length ? " · Drive 링크 " + (pl2.drive.length + pl2.pcDrive.length + c.driveLinks.length) + "개 (" + (shareSel.value === "people" ? "받는 사람만 볼 수 있게" : "링크가 있는 누구나 볼 수 있게") + " 공유)" : "") +
+          (g.card ? " · 명함 포함" : "") + ". 보내면 되돌릴 수 없어요."));
+        cf.appendChild(btn("보내기", "primary", doSend));
+        cf.appendChild(btn("고치기", "", function(){ c.confirming = false; drawFoot(); }));
+        foot.appendChild(cf);
+        return;
+      }
+      if (isG && !isFwd && !blockedTools.create_draft) foot.appendChild(btn("임시보관함에 저장", "", doDraft));
+      foot.appendChild(btn("보내기", "primary", function(){
+        var err = check(gather(), false);
+        if (err){ setStatus(err, "bad"); return; }
+        setStatus(""); c.confirming = true; drawFoot();
+      }));
+    }
+    function after(msg){
+      lock(false); m.close(); composerOpen = false;
+      if (c.driveWarn) msg += " · " + c.driveWarn;
+      if (x) x.replyMsg = msg; else flash(msg);
+      // 보낸메일함 목록은 다음에 열 때 새로 불러온다
+      Object.keys(store).forEach(function(k){ if (k.indexOf(acc + "|sent|") === 0 || k.indexOf("all|sent|") === 0) delete store[k]; });
+      if (isG) mcp.invalidate("Gmail", "search_threads").catch(function(){});
+      else mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+      render();
+    }
+    function failed(e, what){
+      lock(false); c.confirming = false; drawFoot();
+      var msg = errorText(e, acc);
+      if (!isG && e && e.code === "tool_error" && /auth|login|535|credential|smtp/i.test(e.message || "")) msg = "보내는 메일 서버 로그인에 실패했어요. " + ACC[acc].label + " 메일 설정에서 SMTP(외부 메일 프로그램) 사용이 켜져 있는지 확인해 주세요.";
+      if (!isG && e && e.code === "not_in_manifest") msg = "PC의 imap 연결에 " + (isNew ? "보내기" : "답장") + " 기능이 꺼져 있을 수 있어요. Claude 앱을 다시 시작했는지 확인해 주세요.";
+      if (e && e.code === "bad_request") msg = "첨부를 넘기지 못했어요 (파일 형식이나 크기 문제일 수 있어요). " + (e.message ? "(" + String(e.message).slice(0, 80) + ")" : "");
+      if (e && e.server === "host:attachments") msg = "첨부를 PC에 준비하지 못했어요. " + (e.message && /Drive folder/i.test(e.message) ? "Google Drive 데스크톱 앱이 켜져 있고 로그인되어 있는지 확인해 주세요." : "Claude 앱을 다시 시작했는지 확인해 주세요.") + " (" + (e.code || "오류") + ")";
+      if (e && e.server === "Google Drive" && e.message && /오래 걸려요/.test(e.message)) msg = e.message;
+      if (e && e.server === "Google Drive") msg = "Google Drive에 올리거나 공유하지 못했어요. " + (e.code === "server_not_connected" ? "claude.ai 설정에서 Google Drive 커넥터를 연결해 주세요." : "(" + (e.code || "오류") + ")");
+      // 조직 정책으로 막힌 기능은 이 창을 다시 열 때 버튼을 숨긴다
+      if (e && e.code === "blocked_by_policy"){
+        if (what === "저장하지") blockedTools.create_draft = true;
+        msg = (what === "저장하지" ? "Gmail 임시보관함 저장이 " : "이 기능이 ") + "조직 정책으로 막혀 있어요. claude.ai 조직 관리자에게 허용을 요청하거나 Gmail 웹사이트에서 해 주세요.";
+        drawFoot();
+      }
+      setStatus(what + " 못했어요. " + msg, "bad");
+    }
+    function doSend(){
+      if (c.busy || !mcp) return;
+      var g = gather();
+      lock(true); foot.textContent = ""; setStatus("보내는 중…");
+      driveUpload(g).then(function(g2){ g = g2; setStatus("보내는 중…"); return attachPayload(); }).then(function(atts){
+        var w = withCard(g, atts);
+        if (isFwd){
+          if (isG){
+            var fi = {messageId: last.id, to: g.to, forwardText: g.text, htmlBody: w.html, includeSignature: !!(gSig && gSig.checked)};
+            if (g.cc.length) fi.cc = g.cc;
+            if (w.atts.length) fi.attachments = w.atts;
+            return mcp.callTool("Gmail", "forward", fi, {cache: false});
+          }
+          return mcp.callTool("host:imap", "imap_forward_email", {accountName: x.acc, folder: x.folder, uid: x.uid, to: g.to, text: g.text, includeAttachments: true}, {cache: false});
+        }
+        if (isNew){
+          if (isG){
+            var ni = {to: g.to, subject: g.subject, body: g.text, htmlBody: w.html, includeSignature: !!(gSig && gSig.checked)};
+            if (g.cc.length) ni.cc = g.cc;
+            if (w.atts.length) ni.attachments = w.atts;
+            return mcp.callTool("Gmail", "send_message", ni, {cache: false});
+          }
+          var ii = {accountName: acc, to: g.to, subject: g.subject, text: g.text, html: w.html};
+          if (g.cc.length) ii.cc = g.cc;
+          if (w.atts.length) ii.attachments = w.atts;
+          return mcp.callTool("host:imap", "imap_send_email", ii, {cache: false});
+        }
+        if (isG){
+          var input = {messageId: last.id, body: g.text, htmlBody: w.html, replyAll: mode === "all", includeSignature: !!(gSig && gSig.checked)};
+          if (w.atts.length) input.attachments = w.atts;
+          if (g.toChanged) input.to = g.to;
+          if (g.cc.length) input.cc = g.cc;
+          return mcp.callTool("Gmail", "reply", input, {cache: false});
+        }
+        var inp = {accountName: x.acc, folder: x.folder, uid: x.uid, text: g.text, html: w.html, replyAll: mode === "all"};
+        if (w.atts.length) inp.attachments = w.atts;
+        return mcp.callTool("host:imap", "imap_reply_to_email", inp, {cache: false});
+      }).then(function(){
+        if (isDraftMode && draft) return mcp.callTool("Gmail", "delete_draft", {draftId: draft.draftId}, {cache: false}).catch(function(){});
+      }).then(function(){ if (isDraftMode) dropDrafts(); after(isNew ? "✓ 메일을 보냈어요. 보낸메일함에 있어요." : isFwd ? "✓ 전달했어요." : "✓ 답장을 보냈어요. 보낸메일함에 있어요."); }, function(e){ failed(e, "보내지"); });
+    }
+    function doDraft(){
+      if (c.busy || !mcp) return;
+      var g = gather(), err = check(g, true);
+      if (err){ setStatus(err, "bad"); return; }
+      lock(true); foot.textContent = ""; setStatus("임시보관함에 저장하는 중…");
+      driveUpload(g).then(function(g2){ g = g2; setStatus("임시보관함에 저장하는 중…"); return attachPayload(); }).then(function(atts){
+        var w = withCard(g, atts);
+        var input = {subject: g.subject, body: g.text, htmlBody: w.html, includeSignature: !!(gSig && gSig.checked)};
+        if (!isNew && !isFwd) input.replyToMessageId = last.id;
+        if (g.to.length) input.to = g.to;
+        if (g.cc.length) input.cc = g.cc;
+        if (w.atts.length) input.attachments = w.atts;
+        return mcp.callTool("Gmail", "create_draft", input, {cache: false});
+      }).then(function(){
+        if (isDraftMode && draft) return mcp.callTool("Gmail", "delete_draft", {draftId: draft.draftId}, {cache: false}).catch(function(){});
+      }).then(function(){ dropDrafts(); after("✓ Gmail 임시보관함에 저장했어요"); }, function(e){ failed(e, "저장하지"); });
+    }
+    drawFoot();
+    setTimeout(function(){ try{ ta.focus(); }catch(e){} }, 30);
+  }
+
+  // ---- 메일 속 그림 ----
+  function remoteImgSrcs(html){
+    var out = [], seen = {}, re = /<img\b[^>]*?\bsrc\s*=\s*(["']?)(https?:[^"'\s>]+)\1/gi, m;
+    while ((m = re.exec(html))){ if (!seen[m[2]]){ seen[m[2]] = true; out.push(m[2]); } }
+    return out;
+  }
+  function unescAttr(v){ return String(v).replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">"); }
+  function replaceSrc(html, raw, dataUrl){ return html.split(raw).join(dataUrl); }
+  function dataUrlOf(r){
+    var bs = (r && r.content) || [];
+    for (var i = 0; i < bs.length; i++){ var b = bs[i] || {}; if (typeof b.data === "string" && b.mimeType) return "data:" + b.mimeType + ";base64," + b.data; }
+    return "";
+  }
+  function isInlinePart(a, m){
+    if (!a.cid) return false;
+    if (m.html && m.html.indexOf("cid:" + a.cid) !== -1) return true;
+    return /^image\//.test(a.mime || "") && !/\.[a-z0-9]{2,5}$/i.test(a.name || "");   // 이름 없는 작은 본문 그림
+  }
+  // 바깥 그림: PC 첨부 도우미로 받아 데이터로 바꿔 넣는다 (claude.ai 안에서는 바깥 주소 그림을 직접 못 연다)
+  function loadRemoteImages(x, o){
+    var jobs = [];
+    o.msgs.forEach(function(m){ if (m.html) remoteImgSrcs(m.htmlShown || m.html).slice(0, 40).forEach(function(raw){ jobs.push({m: m, raw: raw}); }); });
+    if (!jobs.length){ bump(x); return; }
+    var done = 0, ok = 0, firstErr = null, i = 0;
+    o.imgMsg = "그림을 불러오는 중… 0/" + jobs.length; o.imgBad = false; bump(x);
+    function worker(){
+      if (i >= jobs.length) return Promise.resolve();
+      var j = jobs[i++];
+      return mcp.callTool("host:attachments", "fetch_image", {url: unescAttr(j.raw)}, {cache: false}).then(function(r){
+        var d = dataUrlOf(r);
+        if (d){ j.m.htmlShown = replaceSrc(j.m.htmlShown || j.m.html, j.raw, d); ok++; }
+      }, function(e){ if (!firstErr) firstErr = e || {code: "upstream_error"}; }).then(function(){
+        done++;
+        o.imgMsg = "그림을 불러오는 중… " + done + "/" + jobs.length;
+        if (done % 4 === 0) o.imgVer = (o.imgVer || 0) + 1;
+        bump(x);
+        return worker();
+      });
+    }
+    Promise.all([worker(), worker(), worker(), worker()]).then(function(){
+      o.imgVer = (o.imgVer || 0) + 1;
+      if (ok === jobs.length) o.imgMsg = "";
+      else if (!ok && firstErr && (firstErr.code === "not_in_manifest" || firstErr.code === "server_not_connected" || firstErr.code === "tool_error" && /unknown tool/i.test(firstErr.message || ""))){
+        o.imgMsg = "바깥 그림을 보려면 PC의 첨부 도우미 새 버전이 필요해요. Claude 앱을 다시 시작해 주세요."; o.imgBad = true;
+      } else {
+        o.imgMsg = (jobs.length - ok) + "개 그림은 불러오지 못했어요." + (firstErr && firstErr.code === "cancelled" ? " (PC에서 허용하지 않음)" : ""); o.imgBad = !ok;
+      }
+      bump(x);
+    });
+  }
+  // 본문 속 첨부 그림(cid:): 카카오·네이버는 imap에서 그 그림을 받아 넣는다 (Gmail은 Gmail이 처리)
+  function resolveCids(x, o){
+    o.cidDone = true;
+    if (!x.acc) return;
+    var jobs = [];
+    o.msgs.forEach(function(m){
+      if (!m.html || m.html.indexOf("cid:") === -1) return;
+      m.att.forEach(function(a){ if (a.cid && m.html.indexOf("cid:" + a.cid) !== -1) jobs.push({m: m, a: a}); });
+    });
+    if (!jobs.length) return;
+    o.cidBusy = true;
+    Promise.all(jobs.map(function(j){
+      return mcp.callTool("host:imap", "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: j.a.cid}, {cache: false}).then(function(r){
+        var d = dataUrlOf(r);
+        if (d) j.m.htmlShown = (j.m.htmlShown || j.m.html).split("cid:" + j.a.cid).join(d);
+      }, function(){});
+    })).then(function(){ o.cidBusy = false; o.imgVer = (o.imgVer || 0) + 1; bump(x); });
+  }
+
+  function readerView(x, o){
+    var wrap = el("div", "reader");
+    var top = el("div", "rtop");
+    var back = el("button", "iconbtn back", "←"); back.type = "button"; back.title = "목록으로"; back.setAttribute("aria-label", "목록으로");
+    back.addEventListener("click", closeReader);
+    top.appendChild(back);
+    var cat = catOf(x.cat);
+    var tg = el("span", "tag cat", cat.label); tg.style.setProperty("--c", cat.color);
+    top.appendChild(tg);
+    x.chips.forEach(function(nm){ top.appendChild(el("span", "tag" + (x.work ? " work" : ""), nm)); });
+    wrap.appendChild(top);
+    wrap.appendChild(el("h2", "rsubj", x.subject));
+
+    var meta = el("div", "rmeta");
+    meta.appendChild(avatar(x.from));
+    var who = el("div", "who");
+    who.appendChild(el("span", "nm", (x.sent ? "받는 사람: " : "") + x.from));
+    who.appendChild(el("span", "dt", fmtFull(x.dateMs) + (x.count > 1 ? " · 대화 " + x.count + "통" : "")));
+    meta.appendChild(who);
+    wrap.appendChild(meta);
+
+    // 도구 줄
+    var tools = el("div", "tools");
+    if (o.msgs && o.msgs.some(function(m){ return m.html; }))
+      tools.appendChild(btn(o.textOnly ? "원래 모양으로 보기" : "글자만 보기", "", function(){ o.textOnly = !o.textOnly; render(); }));
+    if (x.url){ var ga = el("a", "btn", "Gmail에서 열기"); ga.href = x.url; ga.target = "_blank"; ga.rel = "noopener noreferrer"; tools.appendChild(ga); }
+    if (!o.loading && !o.error){
+      tools.appendChild(btn("답장", "primary", function(){ openComposer(x, o, false); }));
+      tools.appendChild(btn("전체 답장", "", function(){ openComposer(x, o, true); }));
+      tools.appendChild(btn("전달", "", function(){ openForward(x, o); }));
+    }
+    var t2 = el("div", "tools sub");
+    if (x.inTrash){
+      t2.appendChild(btn("받은편지함으로 복원", "primary", function(){ restore(x); }));
+      if (x.acc) t2.appendChild(btn("영구 삭제", "danger", function(){ purge(x); }));
+      else t2.appendChild(el("span", "status", "Gmail 휴지통 메일은 30일 뒤 자동으로 영구 삭제돼요."));
+    }
+    if (!x.inTrash) t2.appendChild(btn(x.starred ? "★ 별표 해제" : "☆ 별표", x.starred ? "staron" : "", function(){ setStar(x, !x.starred); }));
+    if (!x.sent && !x.inTrash) t2.appendChild(btn(x.unread ? "읽음으로" : "안 읽음으로", "", function(){ if (x.unread) markRead(x); else markUnread(x); }));
+    if (!x.sent && !x.inTrash) t2.appendChild(btn(x.acc ? "폴더로 이동" : "라벨·보관", "", function(){ openMove(x); }));
+    if (!x.sent && !x.inTrash) t2.appendChild(btn("스팸 신고", "", function(){ reportSpam(x); }));
+    var unsub = !o.loading && !o.error ? findUnsub(o) : "";
+    if (unsub){ var ua = el("a", "btn", "수신 거부"); ua.href = unsub; ua.target = "_blank"; ua.rel = "noopener noreferrer"; ua.title = "보낸 쪽의 수신 거부 페이지를 새 창으로 열어요"; t2.appendChild(ua); }
+    if (!o.loading && !o.error) t2.appendChild(btn(o.ai && o.ai.text ? "AI 요약 다시" : "AI 요약", "ai", function(){ summarize(x, o); }));
+    if (!o.loading && !o.error && isForeign(x, o)) t2.appendChild(btn(o.tr && (o.tr.text || o.tr.loading) ? (o.tr.hidden ? "번역 보기" : "번역 접기") : "한국어로 번역", "ai", function(){
+      if (o.tr && o.tr.text && !o.tr.loading){ o.tr.hidden = !o.tr.hidden; bump(x); return; }
+      translate(x, o);
+    }));
+    if (x.actMsg) t2.appendChild(el("span", "status" + (x.actBad ? " bad" : " ok"), x.actMsg));
+    var afterTools = [t2];
+    if (o.tr && !o.tr.hidden && (o.tr.loading || o.tr.text || o.tr.error)){
+      var trc = el("div", "aicard trcard");
+      trc.appendChild(el("b", null, "한국어 번역"));
+      var trtx = el("div", "aitext");
+      if (o.tr.text) fillWithLinks(trtx, o.tr.text, o.tr.links); else trtx.textContent = o.tr.loading ? "번역하는 중…" : "";
+      o.tr.node = trtx;
+      trc.appendChild(trtx);
+      if (o.tr.error) trc.appendChild(el("span", "status bad", o.tr.error));
+      afterTools.push(trc);
+    }
+    if (o.ai && (o.ai.loading || o.ai.text || o.ai.error)){
+      var aic = el("div", "aicard");
+      aic.appendChild(el("b", null, "AI 요약"));
+      var aitx = el("div", "aitext", o.ai.text || (o.ai.loading ? "요약하는 중…" : ""));
+      o.ai.node = aitx;
+      aic.appendChild(aitx);
+      if (o.ai.error) aic.appendChild(el("span", "status bad", o.ai.error));
+      afterTools.push(aic);
+    }
+    if (x.replyMsg) tools.appendChild(el("span", "status ok", x.replyMsg));
+    if (canDelete(x) && !x.confirmDel)
+      tools.appendChild(btn(x.deleting ? "휴지통으로 옮기는 중" : "삭제", "danger", x.deleting ? null : function(){ x.confirmDel = true; render(); }));
+    if (x.marking) tools.appendChild(el("span", "status", "읽음으로 바꾸는 중"));
+    else if (x.markErr){
+      tools.appendChild(el("span", "status bad", "읽음 처리를 하지 못했습니다."));
+      tools.appendChild(btn("다시 시도", "", function(){ markRead(x); }));
+    } else if (x.justRead) tools.appendChild(el("span", "status ok", "✓ 읽음으로 바꿨습니다"));
+    wrap.appendChild(tools);
+    afterTools.forEach(function(n){ wrap.appendChild(n); });
+
+    if (x.confirmDel){
+      var cf = el("div", "confirm");
+      cf.appendChild(el("span", null, x.acc ? "이 메일을 " + ACC[x.acc].label + " 휴지통으로 옮길까요?" : "이 메일을 휴지통으로 옮길까요? 30일 안에는 되돌릴 수 있습니다."));
+      if (x.deleting) cf.appendChild(el("span", "status", "옮기는 중"));
+      else {
+        cf.appendChild(btn("휴지통으로", "danger solid", function(){ trash(x); }));
+        cf.appendChild(btn("취소", "", function(){ x.confirmDel = false; x.delErr = null; render(); }));
+      }
+      if (x.delErr){
+        var dm = errorText(x.delErr, x.acc || "gmail");
+        if (x.acc && x.delErr.code !== "cancelled" && x.delErr.code !== "server_not_connected")
+          dm = "PC의 imap 연결에 삭제 기능이 꺼져 있을 수 있습니다. (" + (x.delErr.code || "오류") + ")";
+        cf.appendChild(el("span", "status bad", "옮기지 못했습니다. " + dm));
+      }
+      wrap.appendChild(cf);
+    }
+
+    if (o.loading){ wrap.appendChild(el("div", "skel")); wrap.appendChild(el("div", "skel")); return wrap; }
+    if (o.error){
+      var ne = el("div", "note err");
+      ne.appendChild(el("span", null, errorText(o.error, x.acc || "gmail")));
+      ne.appendChild(btn("다시 시도", "", function(){ delete open[x.id]; select(x); }));
+      wrap.appendChild(ne);
+      return wrap;
+    }
+
+    if (!o.cidDone && !o.cidBusy) resolveCids(x, o);
+    var remote = o.msgs.some(function(m){ return m.html && hasRemoteImages(m.html); });
+    if (remote && !o.showImages && !o.textOnly){
+      var ib = el("div", "note");
+      ib.appendChild(el("span", null, "바깥 이미지를 가려 두었어요. 이미지를 열면 보낸 쪽에 읽은 사실이 알려질 수 있어요."));
+      ib.appendChild(btn("이미지 표시", "primary", function(){ o.showImages = true; loadRemoteImages(x, o); }));
+      wrap.appendChild(ib);
+    } else if (o.imgMsg && !o.textOnly){
+      wrap.appendChild(el("div", "note" + (o.imgBad ? " err" : ""), o.imgMsg));
+    }
+
+    var allAtt = [];
+    o.msgs.forEach(function(m, i){
+      var card = el("div", "card" + ((m.html && !o.textOnly) ? "" : " pad"));
+      if (o.msgs.length > 1) card.appendChild(el("div", "msgsep", (i + 1) + ". " + m.from + " · " + fmtTime(m.dateMs, true)));
+      if (m.html && !o.textOnly) card.appendChild(mailFrame(m.htmlShown || m.html, false));
+      else card.appendChild(el("p", "body", m.body || "(본문 없음)"));
+      if (m.truncated && !o.textOnly) card.appendChild(el("div", "msgsep", "본문이 길어 뒷부분이 잘렸을 수 있습니다."));
+      wrap.appendChild(card);
+      m.att.forEach(function(a){ if (!isInlinePart(a, m)) allAtt.push(a); });
+    });
+
+    if (allAtt.length){
+      wrap.appendChild(el("div", "sec-h", "첨부 " + allAtt.length + "개"));
+      var files = el("div", "files");
+      allAtt.forEach(function(a){
+        var st = o.atts[a.key];
+        var ext = extOf(a.name) || "file";
+        var f = el("button", "file"); f.type = "button"; f.title = a.name;
+        f.setAttribute("aria-pressed", String(!!(st && st.shown)));
+        var fx = el("span", "fx", ext.slice(0, 4)); fx.style.setProperty("--c", EXT_COLORS[ext] || (/^(jpe?g|png|gif|webp|bmp)$/.test(ext) ? "#E2489C" : "#5B6B7F"));
+        f.appendChild(fx);
+        var fn = el("span", "fn");
+        fn.appendChild(el("b", null, a.name));
+        fn.appendChild(el("span", null, (a.size ? fmtSize(a.size) + " · " : "") + (st && st.loading ? "여는 중" : st && st.shown ? "열려 있음" : "눌러서 보기")));
+        f.appendChild(fn);
+        f.addEventListener("click", function(){ toggleAtt(x, o, a); });
+        files.appendChild(f);
+      });
+      wrap.appendChild(files);
+      allAtt.forEach(function(a){ var st = o.atts[a.key]; if (st && st.shown) wrap.appendChild(attView(x, o, a)); });
+    }
+    return wrap;
+  }
+
+  function sigOf(x, o){
+    if (!x) return "none|" + (mcpReady ? 1 : 0);
+    var a = o && o.atts ? Object.keys(o.atts).map(function(k){ var s = o.atts[k]; return k + ":" + (s.loading ? "L" : "") + (s.shown ? "S" : "") + (s.error ? "E" : "") + (s.saveMsg || ""); }).join(",") : "";
+    return [x.id, o ? (o.loading ? "L" : o.error ? "E" : "R") : "-", o && o.showImages, o && o.imgVer, o && o.imgMsg, o && o.textOnly, x.confirmDel, x.deleting, !!x.delErr,
+            x.replyMsg || "", x.ver || 0, o && o.tr ? (o.tr.loading ? "tL" : o.tr.error ? "tE" : o.tr.text ? "tT" + (o.tr.hidden ? "h" : "") : "") : "", o && o.ai ? (o.ai.loading ? "aL" : o.ai.error ? "aE" : o.ai.text ? "aT" : "") : "",
+            x.marking, !!x.markErr, x.justRead, a, downloads ? 1 : 0].join("|");
+  }
+
+  // ---- 목록 사이 상태 맞추기 ----
+  // 같은 메일(같은 id)은 메일함마다 따로 불러온 사본이 있으므로, 바뀐 상태를 기억해 두었다가 모든 사본에 덮어쓴다.
+  var stateById = {};
+  function noteState(x){
+    // 휴지통 사본: 복원했으면 다른 사본은 다시 보이게, 영구 삭제했으면 모든 사본을 숨긴다
+    var trashed = x.inTrash ? !x._restored : !!x.trashed;
+    stateById[x.id] = {unread: !!x.unread, starred: !!x.starred, trashed: trashed, gone: !!x._purged, justRead: !!x.justRead, chips: x.chips && x.chips.slice(), work: x.work};
+  }
+  function syncStates(){
+    var ids = Object.keys(stateById);
+    if (!ids.length) return;
+    Object.keys(store).forEach(function(k){
+      var items = store[k] && store[k].items;
+      if (!items) return;
+      items.forEach(function(it){
+        var st = stateById[it.id];
+        if (!st) return;
+        // 휴지통 목록의 사본은 '휴지통에 있음'이 정상이므로 trashed를 그대로 따르지 않는다
+        if (st.gone) it.trashed = true;
+        else if (!it.inTrash) it.trashed = st.trashed;
+        it.unread = st.unread; it.starred = st.starred;
+        if (st.justRead) it.justRead = true;
+        if (st.chips) { it.chips = st.chips.slice(); it.work = st.work; }
+      });
+    });
+  }
+
+  function render(){
+    syncStates();
+    var key = keyOf(state.account);
+    var data = store[key] || {};
+    var acc = ACC[state.account];
+    var wide = state.range === "week";
+    var app = $("app");
+
+    document.querySelectorAll("[data-account]").forEach(function(b){
+      b.setAttribute("aria-pressed", String(b.dataset.account === state.account));
+      var d = store[keyOf(b.dataset.account)], num = b.querySelector(".num");
+      var u = d && d.items ? d.items.filter(function(x){ return x.unread && !x.trashed; }).length : 0;
+      num.textContent = u ? String(u) : "";
+      num.className = "num" + (u ? " on" : "");
+    });
+    document.querySelectorAll("[data-range]").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.range === state.range)); });
+    $("unreadOnly").checked = state.unreadOnly;
+    $("refresh").disabled = !!data.loading || !mcp;
+    var isSent = state.box === "sent" || state.box === "drafts" || state.box === "trash";
+    var isTrash = state.box === "trash";
+    var isDrafts = state.box === "drafts";
+    var boxName = isTrash ? (state.account === "all" ? "전체 휴지통" : acc.label + " 휴지통") : isDrafts ? "Gmail 임시보관함" : state.account === "all" ? (isSent ? "전체 보낸메일함" : "전체 메일함") : isSent ? acc.label + " 보낸메일함" : acc.label;
+    $("ltitle").textContent = state.q ? "‘" + state.q + "’ 검색 결과" : (isSent || state.cat === "all") ? boxName : catOf(state.cat).label;
+    document.querySelector(".seg[aria-label='기간']").hidden = !!state.q || isTrash;
+    $("qClear").hidden = !state.q;
+    if (document.activeElement !== $("q")) $("q").value = state.q;
+    document.querySelectorAll("[data-box]").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.box === state.box)); });
+    $("catsHead").hidden = isSent; $("cats").hidden = isSent;
+    $("unreadOnly").parentNode.hidden = isSent;
+
+    var notice = $("notice"); notice.textContent = "";
+    drawBulk();
+    var list = $("list"); list.textContent = "";
+    var cats = $("cats"); cats.textContent = "";
+    var reader = $("reader");
+
+    if (mcpReady && !mcp){
+      $("fresh").textContent = "연결 없음";
+      var n0 = el("div", "note err");
+      n0.appendChild(el("strong", null, "이 화면에서는 메일 연결을 쓸 수 없어요."));
+      n0.appendChild(el("span", null, "claude.ai 또는 Claude 앱에 로그인한 상태에서 이 페이지를 열어 주세요. 페이지 주인만 메일을 볼 수 있어요."));
+      notice.appendChild(n0);
+      reader.textContent = ""; readerSig = "";
+      return;
+    }
+
+    var all = (data.items || []).filter(function(x){ return !x.trashed; });
+    if (sel && (sel.trashed || all.indexOf(sel) === -1)) sel = null;
+
+    // 왼쪽 분류 목록
+    var catList = [{key: "all", label: "전체", color: "var(--faint)"}].concat(CATS);
+    catList.forEach(function(c){
+      var inCat = c.key === "all" ? all : all.filter(function(x){ return x.cat === c.key; });
+      var unread = inCat.filter(function(x){ return x.unread; }).length;
+      var b = el("button", "navbtn"); b.type = "button";
+      b.setAttribute("aria-pressed", String(state.cat === c.key));
+      b.style.setProperty("--c", c.color);
+      b.appendChild(el("span", "dot"));
+      b.appendChild(el("span", "lbl", c.label));
+      b.appendChild(el("span", "num" + (unread ? " on" : ""), data.items ? (unread ? unread + " / " + inCat.length : String(inCat.length)) : ""));
+      b.addEventListener("click", function(){ state.cat = c.key; persist(); render(); });
+      cats.appendChild(b);
+    });
+
+    if (trashNote && !trashNote.undone && trashNote.x.trashed){
+      var tn = el("div", "note");
+      var tx = trashNote.x;
+      tn.appendChild(el("span", null, "‘" + tx.subject + "’ 메일을 " + (tx.acc ? ACC[tx.acc].label + " " : "") + "휴지통으로 옮겼어요." +
+        (tx.acc ? " 되돌리려면 " + ACC[tx.acc].label + " 메일 휴지통에서 옮겨 주세요." : "")));
+      if (!tx.acc){
+        if (trashNote.undoing) tn.appendChild(el("span", "status", "되돌리는 중"));
+        else tn.appendChild(btn("되돌리기", "primary", untrash));
+      }
+      tn.appendChild(btn("닫기", "", function(){ trashNote = null; render(); }));
+      if (trashNote.error) tn.appendChild(el("span", "status bad", "되돌리지 못했어요."));
+      notice.appendChild(tn);
+    }
+    if (data.error){
+      var n1 = el("div", "note err");
+      n1.appendChild(el("span", null, errorText(data.error, state.account)));
+      n1.appendChild(btn("다시 시도", "primary", function(){ load(true); }));
+      notice.appendChild(n1);
+    }
+    if (state.q && data.items) notice.appendChild(el("div", "note", "최근 1년 안에서 " + (state.account === "all" ? "세 계정 모두" : acc.label + "에서") + " 찾았어요. " + (state.account === "gmail" || state.account === "all" ? "Gmail은 본문까지, " : "") + (state.account !== "gmail" ? "카카오·네이버는 제목과 보낸 사람으로 찾아요." : "")));
+    if (data.partErrors) Object.keys(data.partErrors).forEach(function(a){
+      var ne2 = el("div", "note err"); ne2.appendChild(el("span", null, ACC[a].label + ": " + errorText(data.partErrors[a], a)));
+      ne2.appendChild(btn("다시 시도", "", function(){ load(true); })); notice.appendChild(ne2);
+    });
+    if (data.more){
+      var mn = el("div", "note");
+      mn.appendChild(el("span", null, state.q ? "결과가 많아 최근 것부터 일부만 보여 줘요." : "메일이 많아 최근 것부터 일부만 보여 줘요."));
+      mn.appendChild(btn("더 불러오기", "primary", function(){ var k = keyOf(state.account); moreLv[k] = (moreLv[k] || 1) + 1; load(true); }));
+      notice.appendChild(mn);
+    }
+    if (false) notice.appendChild(el("div", "note", state.q ? "결과가 많아 최근 것부터 일부만 보여 줘요. 검색어를 더 구체적으로 써 보세요." : "메일이 많아 최근 것부터 일부만 보여 줘요. 기간을 좁히면 전부 보여요."));
+
+    if (data.at){
+      var d = new Date(data.at);
+      $("fresh").textContent = (data.loading ? "새로 불러오는 중 · " : "") + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " 기준";
+    } else {
+      $("fresh").textContent = data.loading || !mcpReady ? "불러오는 중" : "";
+    }
+
+    // 가운데 목록
+    if (!data.items){
+      if (data.loading || !mcpReady) for (var i = 0; i < 6; i++) list.appendChild(el("li", "skel"));
+    } else {
+      var shown = all.filter(function(x){
+        if (isSent) return true;
+        if (state.cat !== "all" && x.cat !== state.cat) return false;
+        // 안 읽은 것만 볼 때도 방금 읽음 처리한 메일·열어 둔 메일은 남겨 둔다
+        if (state.unreadOnly && !(x.unread || x.justRead || x.marking || x === sel)) return false;
+        return true;
+      });
+      if (!shown.length){
+        var label = {today:"오늘", yesterday:"어제", week:"이번 주", month:"최근 한 달"}[state.range];
+        list.appendChild(el("li", "empty", state.unreadOnly && all.length
+          ? label + " 들어온 메일을 모두 읽었어요."
+          : state.q ? "‘" + state.q + "’에 맞는 메일이 없어요." : isTrash ? "휴지통이 비어 있어요." : isSent ? label + " 보낸 메일이 없어요." : label + " 들어온 " + (state.cat === "all" ? "" : catOf(state.cat).label + " ") + "메일이 없어요."));
+      }
+      shown.forEach(function(x){
+        var li = el("li");
+        var row = el("div", "mrow" + (x.unread ? " unread" : "") + (picked[x.id] ? " picked" : "")); row.tabIndex = 0; row.setAttribute("role", "button");
+        row.dataset.id = x.id;
+        if (x === sel) row.setAttribute("aria-current", "true");
+        if (x === cursor) row.classList.add("cursor");
+        row.addEventListener("click", function(){ if (row._noClick){ row._noClick = false; return; } cursor = x; if (x.isDraft) openDraft(x); else select(x); });
+        row.addEventListener("keydown", function(e){ if (e.key === "Enter" && e.target === row){ e.preventDefault(); row.click(); } });
+        var ck = el("label", "pick"); ck.title = "선택"; var cki = el("input"); cki.type = "checkbox"; cki.checked = !!picked[x.id];
+        cki.setAttribute("aria-label", x.subject + " 선택");
+        ck.addEventListener("click", function(e){ e.stopPropagation(); });
+        cki.addEventListener("change", function(){ if (cki.checked) picked[x.id] = x; else delete picked[x.id]; render(); });
+        ck.appendChild(cki);
+        var avw = el("span", "avwrap"); avw.appendChild(avatar(x.from)); avw.appendChild(ck);
+        row.appendChild(avw);
+        var mm = el("div", "mmain");
+        var t1 = el("div", "mtop");
+        t1.appendChild(el("span", "mfrom", (x.sent && !x.inTrash ? "받는 사람: " : "") + x.from + (x.count > 1 ? " (" + x.count + ")" : "")));
+        if (x.unread) t1.appendChild(el("span", "udot"));
+        if (x.starred) t1.appendChild(el("span", "star on", "★"));
+        t1.appendChild(el("span", "mtime", fmtTime(x.dateMs, wide || state.range === "month" || !!state.q || x.isDraft)));
+        mm.appendChild(t1);
+        mm.appendChild(el("span", "msubj", x.subject));
+        if (x.snippet) mm.appendChild(el("span", "msnip", x.snippet));
+        var tags = el("div", "tags");
+        if (state.account === "all"){ var ak = x.acc || "gmail", at2 = el("span", "tag acct", ACC[ak].label); at2.style.setProperty("--c", ACC_COLOR[ak]); tags.appendChild(at2); }
+        if (!isSent && state.cat === "all"){ var c = catOf(x.cat), ct = el("span", "tag cat", c.label); ct.style.setProperty("--c", c.color); tags.appendChild(ct); }
+        x.chips.forEach(function(nm){ tags.appendChild(el("span", "tag" + (x.work ? " work" : ""), nm)); });
+        if (x.marking) tags.appendChild(el("span", "tag wait", "읽음 처리 중"));
+        else if (x.markErr) tags.appendChild(el("span", "tag fail", "읽음 처리 실패"));
+        else if (x.justRead) tags.appendChild(el("span", "tag read", "✓ 읽음 처리됨"));
+        if (tags.childNodes.length) mm.appendChild(tags);
+        row.appendChild(mm);
+        if (canDelete(x)){ li.className = "swipe"; li.appendChild(el("div", "swipebg", "삭제")); }
+        li.appendChild(row);
+        if (canDelete(x)) attachSwipe(li, row, x);
+        list.appendChild(li);
+      });
+    }
+
+    // 오른쪽 읽기 창 (바뀐 것이 있을 때만 다시 그린다)
+    app.classList.toggle("reading", !!sel);
+    var sig = sigOf(sel, sel && open[sel.id]);
+    if (sig !== readerSig){
+      readerSig = sig;
+      reader.textContent = "";
+      if (sel && open[sel.id]) reader.appendChild(readerView(sel, open[sel.id]));
+      else {
+        var g = el("div", "ghost");
+        g.innerHTML = '<div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg>읽을 메일을 골라 주세요</div>';
+        reader.appendChild(g);
+      }
+    }
+
+    var foot = $("foot"); foot.textContent = "";
+    if (state.account === "all"){
+      foot.textContent = "Gmail·카카오·네이버 메일을 한곳에 모아 보여 줘요. 카카오·네이버는 PC에서 Claude 앱이 켜져 있을 때만 불러와요.";
+    } else if (state.account === "gmail"){
+      foot.textContent = "메일을 열면 Gmail에서도 읽음으로 바뀌어요. 삭제한 메일은 Gmail 휴지통으로 가요. 보낸 메일과 스팸함은 빠져 있어요.";
+    } else {
+      foot.appendChild(document.createTextNode(acc.label + " 메일은 PC에서 Claude 앱이 켜져 있을 때만 불러와요. 열면 " + acc.label + "에서도 읽음으로 바뀌어요. 원문 화면: "));
+      var a = el("a", null, acc.site.replace("https://", "").replace(/\/$/, "")); a.href = acc.site; a.target = "_blank"; a.rel = "noopener noreferrer";
+      foot.appendChild(a);
+    }
+  }
+
+  document.querySelectorAll("[data-account]").forEach(function(b){
+    b.addEventListener("click", function(){ state.account = b.dataset.account; sel = null; persist(); load(false); });
+  });
+
+
+  // ---- 별표·안 읽음·이동·스팸·전달·요약·선택·할 일·단축키 ----
+  var picked = {};       // 선택한 메일 id -> 메일
+  var bulkBusy = "";     // 여러 통 처리 중 안내
+  var cursor = null;     // 단축키로 가리키는 메일
+  function bump(x, msg, bad){ x.ver = (x.ver || 0) + 1; if (msg !== undefined){ x.actMsg = msg; x.actBad = !!bad; } render(); }
+  function act(x, label, call, onOk){
+    bump(x, label + " 중…");
+    return call.then(function(){ onOk && onOk(); noteState(x); bump(x, "✓ " + label + " 완료"); return true; })
+      .catch(function(e){ bump(x, label + " 못했어요. " + errorText(e, x.acc || "gmail"), true); return false; });
+  }
+  function invalidateLists(x){
+    if (x.acc) mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+    else mcp.invalidate("Gmail", "search_threads").catch(function(){});
+  }
+  function setStar(x, on){
+    var call = x.acc
+      ? mcp.callTool("host:imap", on ? "imap_flag_email" : "imap_unflag_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      : mcp.callTool("Gmail", on ? "label_thread" : "unlabel_thread", {threadId: x.id, labelIds: ["STARRED"]}, {cache: false});
+    return act(x, on ? "별표" : "별표 해제", call, function(){ x.starred = on; invalidateLists(x); });
+  }
+  function markUnread(x){
+    var call = x.acc
+      ? mcp.callTool("host:imap", "imap_mark_as_unread", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      : mcp.callTool("Gmail", "label_thread", {threadId: x.id, labelIds: ["UNREAD"]}, {cache: false});
+    return act(x, "안 읽음 표시", call, function(){ x.unread = true; x.justRead = false; invalidateLists(x); });
+  }
+  // 휴지통 목록은 다음에 열 때 새로 읽는다 (지금 보고 있는 목록은 그대로 두고 화면에서만 뺀다)
+  function dropTrashLists(){ var cur = keyOf(state.account); Object.keys(store).forEach(function(k){ if (k.indexOf("|trash|") !== -1 && k !== cur) delete store[k]; }); }
+  function removeFromList(x){ x.trashed = true; noteState(x); delete picked[x.id]; if (sel === x) sel = null; invalidateLists(x); dropTrashLists(); }
+  // 휴지통에서 받은편지함으로 되돌리기
+  function restore(x){
+    var call = x.acc
+      ? mcp.callTool("host:imap", "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: "INBOX"}, {cache: false})
+      : mcp.callTool("Gmail", "untrash_thread", {threadId: x.id}, {cache: false});
+    return act(x, "복원", call, function(){ x._restored = true; removeFromList(x); Object.keys(store).forEach(function(k){ if (k.indexOf("|inbox|") !== -1) delete store[k]; }); });
+  }
+  // 카카오·네이버 휴지통에서 지우면 영구 삭제 (되돌릴 수 없음)
+  function purge(x){
+    if (!x.acc) return;
+    return askConfirm("‘" + x.subject + "’ 메일을 영구 삭제할까요? 되돌릴 수 없어요.", "영구 삭제", true).then(function(ok){
+      if (ok) return act(x, "영구 삭제", mcp.callTool("host:imap", "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false}), function(){ x._purged = true; removeFromList(x); });
+    });
+  }
+
+  // 카카오·네이버 폴더 목록 (계정별로 한 번만 읽는다)
+  var folderCache = {};
+  function imapFolders(acc){
+    if (folderCache[acc]) return folderCache[acc];
+    folderCache[acc] = readTool("host:imap", "imap_list_folders", {accountName: acc}).then(function(r){
+      var p = r.payload, arr = Array.isArray(p) ? p : (p && (p.folders || p.mailboxes)) || [];
+      return arr.map(function(fd){ return typeof fd === "string" ? {name: fd} : {name: fd.path || fd.name, use: fd.specialUse || fd.special_use || fd.role || ""}; })
+        .filter(function(fd){ return fd.name; });
+    }).catch(function(e){ delete folderCache[acc]; throw e; });
+    return folderCache[acc];
+  }
+  function openMove(x){
+    var m = modal(x.acc ? "폴더로 이동" : "라벨 붙이기·보관", function(){ m.close(); });
+    var b = m.body, list = el("div", "picklist");
+    b.appendChild(el("p", "cnote", x.subject));
+    b.appendChild(list);
+    list.appendChild(el("span", "cnote", "불러오는 중…"));
+    function item(label, sub, fn){
+      var it = el("button", "pickitem"); it.type = "button";
+      it.appendChild(el("b", null, label)); if (sub) it.appendChild(el("span", null, sub));
+      it.addEventListener("click", function(){ m.close(); fn(); });
+      list.appendChild(it);
+    }
+    if (x.acc){
+      imapFolders(x.acc).then(function(fds){
+        list.textContent = "";
+        fds.filter(function(fd){ return fd.name !== x.folder && !/^(Sent Messages|Drafts|Deleted Messages|예약편지함)$/.test(fd.name); }).forEach(function(fd){
+          item(fd.name, fd.name === "INBOX" ? "받은편지함" : "", function(){
+            act(x, "‘" + fd.name + "’로 이동", mcp.callTool("host:imap", "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: fd.name}, {cache: false}),
+              function(){ removeFromList(x); });
+          });
+        });
+      }, function(e){ list.textContent = ""; list.appendChild(el("span", "status bad", errorText(e, x.acc))); });
+    } else {
+      loadLabels().then(function(map){
+        list.textContent = "";
+        item("보관", "받은편지함에서 빼기 (전체보관함에는 남아요)", function(){
+          act(x, "보관", mcp.callTool("Gmail", "unlabel_thread", {threadId: x.id, labelIds: ["INBOX"]}, {cache: false}), function(){ removeFromList(x); });
+        });
+        Object.keys(map || {}).filter(function(id){ return /^Label_/.test(id); }).sort(function(a, c){ return String(map[a]).localeCompare(String(map[c])); }).forEach(function(id){
+          item(map[id], "라벨 붙이기", function(){
+            act(x, "‘" + map[id] + "’ 라벨", mcp.callTool("Gmail", "label_thread", {threadId: x.id, labelIds: [id]}, {cache: false}), function(){
+              if (x.chips.indexOf(map[id]) === -1) x.chips.push(map[id]); x.work = true; invalidateLists(x);
+            });
+          });
+        });
+      });
+    }
+  }
+  function reportSpam(x){
+    return askConfirm("이 메일을 스팸으로 신고할까요? 스팸함으로 옮겨져요.", "스팸 신고", true).then(function(ok){ if (ok) return doReportSpam(x); });
+  }
+  function doReportSpam(x){
+    if (!x.acc) return act(x, "스팸 신고", mcp.callTool("Gmail", "mark_thread_spam", {threadId: x.id}, {cache: false}), function(){ removeFromList(x); });
+    bump(x, "스팸함 찾는 중…");
+    imapFolders(x.acc).then(function(fds){
+      var junk = fds.filter(function(fd){ return /junk/i.test(fd.use) || /^(스팸편지함|Junk|Spam|스팸)$/i.test(fd.name); })[0];
+      if (!junk) throw {code: "tool_error", message: "스팸함을 찾지 못했어요"};
+      return act(x, "스팸 신고", mcp.callTool("host:imap", "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: junk.name}, {cache: false}), function(){ removeFromList(x); });
+    }).catch(function(e){ bump(x, "스팸 신고 못했어요. " + (e && e.message ? e.message : errorText(e, x.acc)), true); });
+  }
+  // 수신 거부 링크: 본문에서 '수신 거부·unsubscribe' 링크를 찾는다
+  function findUnsub(o){
+    if (o.unsub !== undefined) return o.unsub;
+    var found = "";
+    (o.msgs || []).some(function(m){
+      if (!m.html) return false;
+      try{
+        var d = new DOMParser().parseFromString(m.html, "text/html");
+        var as = d.querySelectorAll("a[href]");
+        for (var i = 0; i < as.length; i++){
+          var h = as[i].getAttribute("href") || "", t = (as[i].textContent || "") + " " + h;
+          if (/^https?:/i.test(h) && /unsubscribe|수신\s*거부|수신\s*해지|구독\s*(취소|해지)|수신\s*동의\s*철회|opt-?out/i.test(t)){ found = h; return true; }
+        }
+      }catch(e){}
+      return false;
+    });
+    o.unsub = found;
+    return found;
+  }
+  function rawTextOf(m){
+    var t = m.body || "";
+    if ((!t || t.length < 40) && m.html){ try{ t = new DOMParser().parseFromString(m.html, "text/html").body.innerText || t; }catch(e){} }
+    return t;
+  }
+  // links: 배열을 주면 링크를 [링크N]으로 바꾸고 주소를 모은다. 안 주면 링크를 지운다.
+  function cleanForAI(t, links){
+    t = String(t || "").replace(/\r/g, "");
+    function mark(url){
+      var tail = (/[.,;:!?)\]]+$/.exec(url) || [""])[0];   // 링크 바로 뒤 문장부호는 살린다
+      url = url.slice(0, url.length - tail.length);
+      if (!links) return tail;
+      var i = links.indexOf(url);
+      if (i === -1){ links.push(url); i = links.length - 1; }
+      return "[링크" + (i + 1) + "]" + tail;
+    }
+    t = t.replace(/[(<]\s*(https?:\/\/[^\s)>]+)\s*[)>]/g, function(_, u){ return mark(u); });
+    t = t.replace(/https?:\/\/\S+/g, function(u){ return mark(u); });
+    t = t.split("\n").filter(function(l){ return !/^[\s*=_\-–—#~·•|+]{4,}$/.test(l); }).map(function(l){ return l.replace(/\s+$/, ""); }).join("\n");
+    return t.replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
+  }
+  function plainOf(o, links){
+    var ms = o.msgs || [];
+    return ms.map(function(m, i){
+      var t = cleanForAI(rawTextOf(m), links);
+      return ms.length > 1 ? "[" + (i + 1) + "번째 메일 · " + m.from + "]\n" + t : t;
+    }).join("\n\n").slice(0, 14000);
+  }
+  // 번역 결과의 [링크N]을 눌러 열 수 있는 링크로 바꿔 그린다
+  function fillWithLinks(node, text, links){
+    node.textContent = "";
+    String(text || "").split(/(\[링크\d+\])/).forEach(function(part){
+      var m = /^\[링크(\d+)\]$/.exec(part), url = m && links && links[Number(m[1]) - 1];
+      if (url && /^https?:\/\//i.test(url)){
+        var a = el("a", "trlink", "링크"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.title = url;
+        node.appendChild(a);
+      } else if (part) node.appendChild(document.createTextNode(part));
+    });
+  }
+
+  // ---- AI (이 페이지에서 Claude를 부른다) ----
+  var samplerP = null;
+  function sampler(){
+    if (!samplerP) samplerP = (window.claude && typeof window.claude.use === "function") ? window.claude.use("sample").catch(function(){ return null; }) : Promise.resolve(null);
+    return samplerP;
+  }
+  function aiError(e){
+    var c = e && e.code;
+    if (c === "not_granted") return "AI 사용이 허용되지 않았어요.";
+    if (c === "rate_limited") return "잠시 뒤에 다시 시도해 주세요.";
+    return "AI가 답하지 못했어요." + (c ? " (" + c + ")" : "");
+  }
+  // 외국어 메일인지: 제목·본문 글자 중 한글이 아주 적으면 외국어로 본다
+  function isForeign(x, o){
+    if (o.foreign !== undefined) return o.foreign;
+    var t = (x.subject + " " + plainOf(o)).slice(0, 3000);
+    var hangul = (t.match(/[\uAC00-\uD7A3]/g) || []).length;
+    var letters = (t.match(/[A-Za-z\u00C0-\u024F\u0400-\u04FF\u3040-\u30FF\u4E00-\u9FFF\u0E00-\u0E7F]/g) || []).length;
+    o.foreign = letters > 40 && hangul < letters * 0.15;
+    return o.foreign;
+  }
+  function translate(x, o){
+    var links = [];
+    o.tr = {loading: true, links: links}; bump(x);
+    sampler().then(function(sm){
+      if (!sm) throw {code: "not_granted"};
+      var prompt = "다음 이메일을 자연스러운 한국어로 번역해 주세요.\n" +
+        "형식: 첫 줄에 '제목: ' 뒤에 번역한 제목, 한 줄 띄우고 본문 번역.\n" +
+        "문단 나눔은 원문대로 두고, 이름·회사명·주소·금액·날짜·링크는 원문 그대로 두세요. 설명이나 덧붙이는 말 없이 번역만 쓰세요. 마크다운 기호는 쓰지 마세요.\n\n" +
+        "[링크1] 같은 표시는 고치지 말고 그 자리에 그대로 두세요.\n\n" +
+        "제목: " + x.subject + "\n\n" + plainOf(o, links);
+      return sm(prompt, {onText: function(ev){ o.tr.text = ev.text; if (o.tr.node) fillWithLinks(o.tr.node, ev.text, links); }});
+    }).then(function(r){ o.tr = {text: r.text.trim() + (r.truncated ? "\n\n… 메일이 길어 앞부분만 번역했어요." : ""), links: links}; bump(x); },
+            function(e){ o.tr = {error: aiError(e)}; bump(x); });
+  }
+
+  function summarize(x, o){
+    o.ai = {loading: true}; bump(x);
+    sampler().then(function(sm){
+      if (!sm) throw {code: "not_granted"};
+      var prompt = "다음 이메일을 한국어로 요약해 주세요.\n형식:\n- 핵심 3줄 이내 (누가, 무엇을, 언제까지)\n- 내가 할 일이 있으면 '할 일:'로 시작하는 한 줄\n- 마감일·금액·장소 같은 숫자는 그대로\n군더더기 인사말 없이 바로 시작하세요.\n\n제목: " + x.subject + "\n\n" + plainOf(o);
+      return sm(prompt, {modelTier: "quick", onText: function(ev){ o.ai.text = ev.text; if (o.ai.node) o.ai.node.textContent = ev.text; }});
+    }).then(function(r){ o.ai = {text: r.text}; bump(x); }, function(e){ o.ai = {error: aiError(e)}; bump(x); });
+  }
+  // 작성 창의 'AI 초안': 지시 한 줄 + (답장·전달이면 원래 메일) -> 본문
+  function aiDraft(instr, ctx, ta, setStatus){
+    setStatus("AI가 초안을 쓰는 중…");
+    return sampler().then(function(sm){
+      if (!sm) throw {code: "not_granted"};
+      var prompt = "아래 요청에 맞는 이메일 본문을 한국어로 써 주세요. 인사와 맺음말은 짧게, 서명과 제목은 빼고 본문만 쓰세요. 마크다운 기호는 쓰지 마세요.\n\n요청: " + instr +
+        (ctx ? "\n\n참고할 원래 메일:\n" + ctx : "") + (ta.value.trim() ? "\n\n지금까지 쓴 내용(다듬어서 반영):\n" + ta.value : "");
+      return sm(prompt, {onText: function(ev){ ta.value = ev.text; }});
+    }).then(function(r){ ta.value = r.text.trim(); setStatus("AI 초안을 넣었어요. 고쳐서 보내세요."); },
+            function(e){ setStatus(aiError(e), "bad"); });
+  }
+  // 오늘 할 일: 지금 목록의 메일에서 답장·확인이 필요한 것만 뽑는다
+  function openTodo(){
+    var data = store[keyOf(state.account)] || {};
+    var items = (data.items || []).filter(function(x){ return !x.trashed && !x.sent && !x.isDraft && x.cat !== "ad"; }).slice(0, 60);
+    var m = modal("할 일 뽑기", function(){ m.close(); });
+    var b = m.body;
+    if (!items.length){ b.appendChild(el("p", "cnote", "지금 목록에 메일이 없어요.")); return; }
+    b.appendChild(el("p", "cnote", "지금 목록의 메일 " + items.length + "통에서 답장이나 확인이 필요한 것을 골라요. (광고는 빼요)"));
+    var out = el("div", "picklist"); out.appendChild(el("span", "cnote", "AI가 살펴보는 중…")); b.appendChild(out);
+    sampler().then(function(sm){
+      if (!sm) throw {code: "not_granted"};
+      var lines = items.map(function(x, i){ return i + "\t" + x.from + "\t" + x.subject + "\t" + (x.snippet || "").slice(0, 160); }).join("\n");
+      var prompt = "아래는 받은 메일 목록입니다 (번호, 보낸 사람, 제목, 미리보기). 내가 답장하거나 확인·처리해야 하는 메일만 골라 JSON 배열로만 답하세요.\n" +
+        "각 항목: {\"i\": 번호, \"task\": 할 일 한 줄(한국어, 20자 안팎), \"due\": 마감이 보이면 짧게 아니면 \"\", \"level\": \"high\"|\"normal\"}\n" +
+        "뉴스레터·알림·영수증처럼 할 일이 없는 메일은 빼세요. 중요한 것부터 정렬하세요.\n\n" + lines;
+      return sm.json(prompt, {modelTier: "quick"});
+    }).then(function(arr){
+      out.textContent = "";
+      arr = Array.isArray(arr) ? arr : [];
+      if (!arr.length){ out.appendChild(el("span", "cnote", "따로 처리할 메일이 없어 보여요.")); return; }
+      arr.forEach(function(t){
+        var x = items[t.i]; if (!x) return;
+        var it = el("button", "pickitem todo" + (t.level === "high" ? " high" : "")); it.type = "button";
+        it.appendChild(el("b", null, (t.level === "high" ? "● " : "") + String(t.task || x.subject)));
+        it.appendChild(el("span", null, x.from + " · " + x.subject + (t.due ? " · 마감 " + t.due : "")));
+        it.addEventListener("click", function(){ m.close(); select(x); });
+        out.appendChild(it);
+      });
+    }, function(e){ out.textContent = ""; out.appendChild(el("span", "status bad", aiError(e))); });
+  }
+
+  // ---- 여러 메일 한꺼번에 ----
+  function drawBulk(){
+    var bar = $("bulkbar"); if (!bar) return;
+    var ids = Object.keys(picked).filter(function(k){ return !picked[k].trashed; });
+    bar.textContent = ""; bar.hidden = !ids.length && !bulkBusy;
+    if (!ids.length) return;
+    var xs = ids.map(function(k){ return picked[k]; });
+    if (bulkBusy){ bar.hidden = false; bar.appendChild(el("b", null, bulkBusy)); return; }
+    bar.appendChild(el("b", null, ids.length + "통 선택"));
+    function run(label, fn){
+      return btn(label, "", function(){
+        var i = 0;
+        (function next(){ if (i >= xs.length){ render(); return; } Promise.resolve(fn(xs[i++])).then(next, next); })();
+      });
+    }
+    if (state.box === "trash"){ bar.appendChild(run("복원", function(x){ return restore(x); })); bar.appendChild(btn("선택 해제", "", function(){ picked = {}; render(); })); return; }
+    bar.appendChild(run("읽음", function(x){ return x.unread ? markRead(x) : null; }));
+    bar.appendChild(run("안 읽음", function(x){ return !x.unread && !x.sent ? markUnread(x) : null; }));
+    bar.appendChild(run("별표", function(x){ return x.starred ? null : setStar(x, true); }));
+    bar.appendChild(btn("삭제", "danger", function(){
+      var ok = xs.filter(canDelete);
+      if (!ok.length){ flash("고른 메일은 여기서 지울 수 없어요."); return; }
+      askConfirm(ok.length + "통을 휴지통으로 옮길까요?", "휴지통으로", true).then(function(yes){
+        if (!yes) return;
+        var i = 0, moved = 0, failed = [];
+        bulkBusy = "휴지통으로 옮기는 중… 0/" + ok.length; render();
+        (function next(){
+          if (i >= ok.length){
+            bulkBusy = "";
+            render();
+            flash(failed.length ? moved + "통을 휴지통으로 옮겼어요. " + failed.length + "통은 못 옮겼어요." : "✓ " + moved + "통을 휴지통으로 옮겼어요.");
+            return;
+          }
+          var x = ok[i++];
+          trash(x).then(function(done){
+            if (done) moved++; else failed.push(x);
+            bulkBusy = "휴지통으로 옮기는 중… " + i + "/" + ok.length; render();
+            next();
+          });
+        })();
+      });
+    }));
+    bar.appendChild(btn("선택 해제", "", function(){ picked = {}; render(); }));
+  }
+
+  // ---- 전달·임시보관함 ----
+  // 줄을 왼쪽으로 충분히 밀었다 놓으면 휴지통으로 (세로 스크롤은 그대로 둔다)
+  var SWIPE_AT = 96;
+  function attachSwipe(li, row, x){
+    var sx = 0, sy = 0, dx = 0, tracking = false, decided = false;
+    row.addEventListener("touchstart", function(e){
+      if (e.touches.length !== 1 || x.deleting) return;
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; tracking = true; decided = false;
+      row.style.transition = "none";
+    }, {passive: true});
+    row.addEventListener("touchmove", function(e){
+      if (!tracking) return;
+      var mx = e.touches[0].clientX - sx, my = e.touches[0].clientY - sy;
+      if (!decided){
+        if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+        decided = true;
+        if (Math.abs(my) > Math.abs(mx) || mx > 0){ tracking = false; return; }   // 세로로 움직이면 스크롤
+        li.classList.add("swiping");
+      }
+      dx = Math.min(0, mx);
+      row.style.transform = "translateX(" + dx + "px)";
+      li.classList.toggle("armed", dx < -SWIPE_AT);
+      if (e.cancelable) e.preventDefault();
+    }, {passive: false});
+    function end(){
+      if (!tracking) return;
+      tracking = false;
+      row.style.transition = "transform .2s ease";
+      if (decided && Math.abs(dx) > 10) row._noClick = true;
+      if (dx < -SWIPE_AT){
+        row.style.transform = "translateX(-110%)";
+        setTimeout(function(){
+          trash(x).then(function(ok){ flash(ok ? "‘" + x.subject + "’ 메일을 휴지통으로 옮겼어요." : "휴지통으로 옮기지 못했어요."); if (!ok) render(); });
+        }, 160);
+      } else {
+        row.style.transform = "";
+        setTimeout(function(){ li.classList.remove("swiping", "armed"); }, 200);
+      }
+    }
+    row.addEventListener("touchend", end);
+    row.addEventListener("touchcancel", end);
+  }
+
+  function openForward(x, o){ if (composerOpen) return; composerOpen = true; x.replyMsg = ""; buildComposer(x, o, "fwd"); }
+  function openDraft(d){ if (composerOpen) return; composerOpen = true; buildComposer(null, null, "draft", d); }
+
+  // ---- 단축키 ----
+  function visibleRows(){ return Array.prototype.slice.call(document.querySelectorAll("#list .mrow")); }
+  function moveCursor(step){
+    var rows = visibleRows(); if (!rows.length) return;
+    var data = store[keyOf(state.account)] || {}, items = data.items || [];
+    var idx = rows.findIndex(function(r){ return cursor && r.dataset.id === cursor.id; });
+    idx = Math.max(0, Math.min(rows.length - 1, idx + step));
+    var id = rows[idx].dataset.id;
+    cursor = items.filter(function(x){ return x.id === id; })[0] || cursor;
+    render();
+    var r2 = document.querySelector('#list .mrow[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'); if (r2){ r2.focus(); r2.scrollIntoView({block: "nearest"}); }
+  }
+  function openHelp(){
+    var m = modal("단축키", function(){ m.close(); });
+    [["j / k", "다음 / 이전 메일"], ["Enter", "메일 열기"], ["r", "답장"], ["a", "전체 답장"], ["f", "전달"], ["c", "새 메일 쓰기"],
+     ["s", "별표"], ["u", "안 읽음으로"], ["e 또는 Delete", "삭제"], ["x", "선택"], ["/", "검색"], ["Esc", "닫기·목록으로"], ["?", "이 도움말"]].forEach(function(k){
+      var row = el("div", "keyrow"); row.appendChild(el("kbd", null, k[0])); row.appendChild(el("span", null, k[1])); m.body.appendChild(row);
+    });
+  }
+  document.addEventListener("keydown", function(e){
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.querySelector(".overlay") || composerOpen) return;
+    var t = e.target; if (t && t.closest && t.closest("input,textarea,select,[contenteditable]")) return;
+    var k = e.key, x = sel || cursor, o = x && open[x.id];
+    if (k === "j"){ e.preventDefault(); moveCursor(1); }
+    else if (k === "k"){ e.preventDefault(); moveCursor(-1); }
+    else if (k === "/"){ e.preventDefault(); $("q").focus(); }
+    else if (k === "?"){ e.preventDefault(); openHelp(); }
+    else if (k === "c"){ e.preventDefault(); openNewMail(); }
+    else if (k === "Enter" && cursor && !sel){ e.preventDefault(); if (cursor.isDraft) openDraft(cursor); else select(cursor); }
+    else if (!x) return;
+    else if (k === "x"){ e.preventDefault(); if (picked[x.id]) delete picked[x.id]; else picked[x.id] = x; render(); }
+    else if (k === "s"){ e.preventDefault(); setStar(x, !x.starred); }
+    else if (k === "u"){ e.preventDefault(); if (!x.sent) markUnread(x); }
+    else if ((k === "e" || k === "Delete") && canDelete(x)){ e.preventDefault(); if (sel !== x) select(x); x.confirmDel = true; render(); }
+    else if ((k === "r" || k === "a" || k === "f") && sel && o && o.msgs){ e.preventDefault(); if (k === "f") openForward(x, o); else openComposer(x, o, k === "a"); }
+  });
+
+  // ---- 새 메일 알림 ----
+  // Gmail은 2분마다, 카카오·네이버는 이 창에서 한 번이라도 불러온 계정만 5분마다 오늘 받은메일함을 다시 읽는다.
+  // (카카오·네이버를 처음부터 자동으로 읽으면 PC 확인 창이 갑자기 뜰 수 있어서)
+  var known = {};     // 계정 -> {메일 id: true}
+  var imapOk = {};    // 이 창에서 불러온 적 있는 카카오·네이버
+  function seedKnown(acc, items){ var k = known[acc] || (known[acc] = {}); items.forEach(function(x){ k[x.id] = true; }); }
+  function poll(acc){
+    if (!mcp || document.hidden) return;
+    var key = acc + "|inbox|today";
+    if (store[key] && store[key].loading) return;
+    var p = acc === "gmail" ? fetchGmail("today", true, false) : fetchImap(acc, "today", true, false);
+    p.then(function(res){
+      var first = !known[acc];
+      var fresh = first ? [] : res.items.filter(function(x){ return !known[acc][x.id] && x.unread; });
+      seedKnown(acc, res.items);
+      var d = store[key];
+      if (d && d.items){
+        if (fresh.length){ d.items = fresh.concat(d.items); d.items.sort(function(a, b){ return b.dateMs - a.dateMs; }); }
+        d.at = res.at;
+      } else if (!d){
+        res.items.sort(function(a, b){ return b.dateMs - a.dateMs; });
+        store[key] = res;
+      }
+      var dall = store["all|inbox|today"];
+      if (fresh.length && dall && dall.items){ dall.items = fresh.concat(dall.items); dall.items.sort(function(a, b){ return b.dateMs - a.dateMs; }); }
+      if (fresh.length){ fresh.sort(function(a, b){ return b.dateMs - a.dateMs; }); showToasts(acc, fresh); }
+      render();
+    }).catch(function(){ /* 알림 확인 실패는 조용히 넘긴다. 다음 차례에 다시 확인한다 */ });
+  }
+  function toastHost(){
+    var h = $("toasts");
+    if (!h){ h = el("div", "toasts"); h.id = "toasts"; h.setAttribute("aria-live", "polite"); document.body.appendChild(h); }
+    return h;
+  }
+  function openFromToast(acc, x){
+    state.account = acc; state.box = "inbox"; state.range = "today"; state.cat = "all"; persist();
+    render();
+    if (x){ select(x); }
+  }
+  function showToasts(acc, list){
+    var host = toastHost();
+    var items = list.length > 3 ? [null] : list;
+    items.forEach(function(x){
+      var t = el("div", "toast"); t.setAttribute("role", "status"); t.tabIndex = 0;
+      var ic = el("span", "tic", ACC[acc].label.charAt(0)); ic.style.setProperty("--c", acc === "gmail" ? "#EA4335" : acc === "kakao" ? "#F7C600" : "#03C75A");
+      t.appendChild(x ? avatar(x.from) : ic);
+      var b = el("div", "tbody");
+      b.appendChild(el("span", "tk", "새 메일 · " + ACC[acc].label));
+      if (x){
+        b.appendChild(el("b", null, x.from));
+        b.appendChild(el("span", "ts", x.subject));
+      } else {
+        b.appendChild(el("b", null, "새 메일 " + list.length + "통이 왔어요"));
+        b.appendChild(el("span", "ts", list.slice(0, 3).map(function(y){ return y.from; }).join(", ") + " 외"));
+      }
+      t.appendChild(b);
+      var cl = el("button", "iconbtn", "✕"); cl.type = "button"; cl.title = "알림 닫기"; cl.setAttribute("aria-label", "알림 닫기");
+      cl.addEventListener("click", function(e){ e.stopPropagation(); gone(); });
+      t.appendChild(cl);
+      function gone(){ t.classList.add("out"); setTimeout(function(){ t.remove(); }, 200); }
+      function go(){ gone(); openFromToast(acc, x); }
+      t.addEventListener("click", go);
+      t.addEventListener("keydown", function(e){ if (e.key === "Enter") go(); });
+      var timer = setTimeout(gone, 10000);
+      t.addEventListener("mouseenter", function(){ clearTimeout(timer); });
+      t.addEventListener("mouseleave", function(){ timer = setTimeout(gone, 4000); });
+      host.appendChild(t);
+      while (host.children.length > 4) host.firstChild.remove();
+    });
+  }
+  setInterval(function(){ poll("gmail"); }, 2 * 60 * 1000);
+  setInterval(function(){ ["kakao", "naver"].forEach(function(a){ if (imapOk[a]) poll(a); }); }, 5 * 60 * 1000);
+
+  document.querySelectorAll("[data-box]").forEach(function(b){
+    b.addEventListener("click", function(){ state.box = b.dataset.box; sel = null; persist(); load(false); });
+  });
+  document.querySelectorAll("[data-range]").forEach(function(b){
+    b.addEventListener("click", function(){ state.range = b.dataset.range; sel = null; persist(); load(false); });
+  });
+  $("unreadOnly").addEventListener("change", function(e){ state.unreadOnly = e.target.checked; persist(); render(); });
+  $("refresh").addEventListener("click", function(){ load(true); });
+  $("searchForm").addEventListener("submit", function(e){ e.preventDefault(); var v = $("q").value.trim(); if (v === state.q) return; state.q = v; sel = null; load(false); });
+  $("q").addEventListener("keydown", function(e){ if (e.key === "Escape" && state.q){ e.stopPropagation(); state.q = ""; $("q").value = ""; sel = null; load(false); } });
+  $("qClear").addEventListener("click", function(){ state.q = ""; $("q").value = ""; sel = null; load(false); });
+  $("sigBtn").addEventListener("click", openSigManager);
+  $("composeBtn").addEventListener("click", openNewMail);
+  $("composeBtn2").addEventListener("click", openNewMail);
+  $("todoBtn").addEventListener("click", openTodo);
+  $("helpBtn").addEventListener("click", openHelp);
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && sel && !composerOpen && !document.querySelector(".overlay") && !e.target.closest("input,textarea")) closeReader();
+  });
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden || !mcp) return;
+    var d = store[keyOf(state.account)];
+    // Gmail만 자동으로 다시 읽는다. 카카오·네이버는 PC 확인 창이 뜰 수 있어 버튼을 눌렀을 때만 읽는다.
+    if (state.account === "gmail" && d && d.at && Date.now() - d.at > 5 * 60 * 1000 && !d.loading) load(true);
+  });
+
+  render();
+  initSigStore();
+  if (window.claude && typeof window.claude.use === "function"){
+    window.claude.use("downloads").then(function(ns){ downloads = ns || null; render(); }).catch(function(){});
+  }
+  var boot = (window.claude && typeof window.claude.use === "function")
+    ? window.claude.use("mcp").catch(function(){ return null; })
+    : Promise.resolve(null);
+  boot.then(function(ns){
+    mcp = ns || null; mcpReady = true;
+    // 카카오·네이버가 마지막 선택이었어도 첫 화면은 Gmail로 연다. PC 확인 창이 페이지를 열자마자 뜨지 않게 하려는 것.
+    if (state.account !== "gmail"){ state.account = "gmail"; }
+    load(false);
+    if (mcp) setTimeout(function(){ if (!known.gmail) poll("gmail"); }, 4000);
+  });
+})();
+</script>
+</body>
+</html>

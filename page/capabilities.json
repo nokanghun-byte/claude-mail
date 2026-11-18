@@ -1,0 +1,15 @@
+{
+  "mcp": {
+    "servers": [
+      {"server": "Gmail", "tools": ["search_threads", "list_labels", "get_thread", "unlabel_thread", "label_thread", "download_gmail_attachment", "trash_thread", "untrash_thread", "reply", "forward", "create_draft", "send_message", "list_drafts", "delete_draft", "mark_thread_spam"]},
+      {"server": "host:imap", "tools": ["imap_search_emails", "imap_get_email", "imap_mark_as_read", "imap_mark_as_unread", "imap_flag_email", "imap_unflag_email", "imap_download_attachment", "imap_delete_email", "imap_reply_to_email", "imap_send_email", "imap_forward_email", "imap_move_email", "imap_list_folders"]},
+      {"server": "host:markitdown", "tools": ["convert_to_markdown"]},
+      {"server": "host:attachments", "tools": ["read_saved_attachment", "fetch_image", "stage_file", "stage_chunk", "rclone_status", "upload_status"]},
+      {"server": "Google Drive", "tools": ["create_file", "share_file", "search_files", "list_recent_files"]}
+    ]
+  },
+  "downloads": true,
+  "db": {},
+  "user": {},
+  "sample": {}
+}
