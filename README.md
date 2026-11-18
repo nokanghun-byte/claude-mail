@@ -39,28 +39,31 @@ Claude 아티팩트(페이지)와 내 PC에서 돌아가는 작은 도우미 서
 | `page/claude-mail.html` | 메일 페이지 (Claude 아티팩트로 게시) |
 | `page/capabilities.json` | 페이지가 쓰는 권한 목록 |
 | `helper/server.js` | 첨부파일 도우미 (의존성 없는 Node.js MCP 서버) |
-| `install/install.ps1` | Windows 설치 스크립트 |
+| `extension/` | Claude 데스크톱 확장 프로그램(.mcpb) 소스 |
+| `install/install.ps1` | Windows 수동 설치 스크립트 |
 | `install/rclone-setup.ps1` | 큰 첨부파일용 Google Drive 연결 (선택) |
 
 IMAP 연결은 오픈소스 [imap-mcp-server](https://www.npmjs.com/package/imap-mcp-server)를 씁니다. 계정 정보는 내 PC(`~/.imap-mcp/accounts.json`)에 암호화되어 저장됩니다.
 
 ### 설치 (Windows)
 
-1. [Node.js](https://nodejs.org) LTS를 설치합니다.
-2. PowerShell에서 설치 스크립트를 실행합니다.
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File install\install.ps1
-   ```
-   - 중간에 `y`를 누르면 IMAP 계정 등록 화면이 열립니다. 메일 주소, IMAP 서버 주소, 앱 비밀번호를 넣고 저장하세요.
-   - 나중에 계정을 더하려면 아래 명령을 실행한 뒤 페이지의 **'다른 메일 연결'** 을 누르세요.
-     ```powershell
-     npx -y -p imap-mcp-server@2.2.0 imap-setup
-     ```
-3. Claude 데스크톱 앱을 완전히 종료했다가 다시 켭니다.
+**가장 쉬운 방법: 확장 프로그램 (Node.js 설치 필요 없음)**
+
+1. [Releases](https://github.com/nokanghun-byte/claude-mail/releases/latest)에서 `claude-mail.mcpb`를 받습니다.
+2. Claude 데스크톱 앱 **설정 → 확장 프로그램(Extensions)** 화면에 파일을 끌어다 놓거나, **고급 설정 → 확장 프로그램 설치**로 고른 뒤 **설치**를 누릅니다.
+3. Claude에게 메일 계정을 등록해 달라고 말합니다. 예) "네이버 메일 계정 추가해줘. 주소는 ○○@naver.com이고 앱 비밀번호는 내가 직접 넣을게."
+   - 메일 쪽 설정에서 **IMAP/SMTP 사용**을 켜고 **앱 비밀번호**를 만들어 두세요.
+   - 계정 정보는 내 PC에만 암호화되어 저장됩니다.
 4. Claude 설정 → 커넥터에서 **Gmail**, **Google Drive**를 연결합니다.
 5. Claude에게 이렇게 부탁합니다.
    > `page/claude-mail.html`을 아티팩트로 게시해줘. 권한은 `page/capabilities.json`대로 선언해줘.
 
+**직접 설정하는 방법 (개발자용)**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install\install.ps1
+```
+Node.js가 필요하며, Claude 앱 설정 파일에 `imap`·`attachments` 서버를 추가합니다. 확장 프로그램을 직접 만들려면 `extension\build.ps1`을 실행하세요.
 ### Google Drive 연결 (선택, 16MB 넘는 첨부파일용)
 
 1. [Google Cloud 콘솔](https://console.cloud.google.com/projectcreate)에서 새 프로젝트를 만듭니다. (무료, 결제 정보 불필요)
@@ -113,28 +116,31 @@ It consists of a Claude artifact (the page) and a small helper server running on
 | `page/claude-mail.html` | The mail page (publish as a Claude artifact) |
 | `page/capabilities.json` | Permissions the page declares |
 | `helper/server.js` | Attachment helper (dependency-free Node.js MCP server) |
-| `install/install.ps1` | Windows installer |
+| `extension/` | Claude desktop extension (.mcpb) source |
+| `install/install.ps1` | Windows manual installer |
 | `install/rclone-setup.ps1` | Google Drive link for large attachments (optional) |
 
 IMAP access uses the open-source [imap-mcp-server](https://www.npmjs.com/package/imap-mcp-server). Account credentials are stored encrypted on your PC (`~/.imap-mcp/accounts.json`).
 
 ### Install (Windows)
 
-1. Install [Node.js](https://nodejs.org) LTS.
-2. Run the installer in PowerShell:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File install\install.ps1
-   ```
-   - Answer `y` to open the IMAP account setup page, then enter your address, IMAP server and app password.
-   - To add accounts later, run the command below and click **'다른 메일 연결' (Connect other mail)** in the page.
-     ```powershell
-     npx -y -p imap-mcp-server@2.2.0 imap-setup
-     ```
-3. Quit the Claude desktop app completely and start it again.
+**Easiest: the extension (no Node.js needed)**
+
+1. Download `claude-mail.mcpb` from [Releases](https://github.com/nokanghun-byte/claude-mail/releases/latest).
+2. In the Claude desktop app, open **Settings → Extensions**, drag the file in (or use **Advanced settings → Install Extension…**) and click **Install**.
+3. Ask Claude to add your mail account, e.g. "Add my Naver mail account."
+   - Turn on **IMAP/SMTP access** in your mail settings and create an **app password**.
+   - Credentials are stored encrypted on your PC only.
 4. In Claude settings → Connectors, connect **Gmail** and **Google Drive**.
 5. Ask Claude:
    > Publish `page/claude-mail.html` as an artifact, declaring the capabilities in `page/capabilities.json`.
 
+**Manual setup (for developers)**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install\install.ps1
+```
+Requires Node.js; adds `imap` and `attachments` servers to the Claude app config. To build the extension yourself, run `extension\build.ps1`.
 ### Google Drive link (optional, for attachments over 16 MB)
 
 1. Create a project in the [Google Cloud console](https://console.cloud.google.com/projectcreate) (free, no billing needed).

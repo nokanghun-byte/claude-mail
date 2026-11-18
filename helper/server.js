@@ -310,7 +310,12 @@ async function fetchImage(id, args){
   }
 }
 
-function send(msg){ process.stdout.write(JSON.stringify(msg) + "\n"); }
+// 다른 프로그램 안에서 모듈로 불릴 때는 응답을 그 프로그램에 돌려준다 (Claude 메일 확장 프로그램)
+const resolvers = new Map();
+function send(msg){
+  if (msg && msg.id != null && resolvers.has(msg.id)){ const r = resolvers.get(msg.id); resolvers.delete(msg.id); return r(msg); }
+  process.stdout.write(JSON.stringify(msg) + "\n");
+}
 function reply(id, result){ send({ jsonrpc: "2.0", id, result }); }
 function fail(id, code, message){ send({ jsonrpc: "2.0", id, error: { code, message } }); }
 function toolError(id, text){ reply(id, { content: [{ type: "text", text }], isError: true }); }
@@ -379,6 +384,10 @@ function handle(msg){
   if (id !== undefined) fail(id, -32601, "method not found: " + method);
 }
 
+let pending = 0, ended = false;   // 그림 받기가 끝나기 전에 닫히지 않게
+if (require.main !== module){
+  module.exports = { request(msg){ return new Promise(r => { resolvers.set(msg.id, r); handle(msg); }); } };
+} else {
 let buf = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", chunk => {
@@ -391,6 +400,6 @@ process.stdin.on("data", chunk => {
     handle(msg);
   }
 });
-let pending = 0, ended = false;   // 그림 받기가 끝나기 전에 닫히지 않게
 process.stdin.on("end", () => { ended = true; if (!pending) process.exit(0); });
 console.error("[attachments] serving " + DIR);
+}

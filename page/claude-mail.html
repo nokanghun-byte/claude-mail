@@ -628,6 +628,27 @@ function fmtSize(n){
   var downloads = null;
   var moreLv = {}, loadMul = 1;   // 화면별 "더 불러오기" 단계    // 첨부를 파일로 저장할 때 쓴다 (없으면 저장 버튼을 숨긴다)
   var trashNote = null;    // 방금 휴지통으로 옮긴 메일 {x, undoing, error, undone}
+  // 로컬 서버: Claude 메일 확장 프로그램(하나로 묶음)이 있으면 그것을, 없으면 따로 설정한 imap·attachments를 쓴다
+  var HOST = {imap: "host:imap", att: "host:attachments"};
+  var HOST_EXT = ["host:claude-mail", "host:Claude_Mail", "host:claude_mail"];
+  function resolveHosts(){
+    if (!mcp || !mcp.listTools) return Promise.resolve();
+    var lt = mcp.listTools().then(function(r){
+      if (!fileArgsP) fileArgsP = Promise.resolve(!!(r && r.fileArgs));
+      var found = {};
+      ((r && r.servers) || []).forEach(function(sv){
+        var names = (sv.tools || []).map(function(t){ return t.name; });
+        if (!/^host:/.test(sv.server)) return;
+        var ext = HOST_EXT.indexOf(sv.server) !== -1;
+        if (names.indexOf("imap_search_emails") !== -1 && (!found.imap || ext)) found.imap = sv.server;
+        if (names.indexOf("stage_chunk") !== -1 && (!found.att || ext)) found.att = sv.server;
+      });
+      if (found.imap) HOST.imap = found.imap;
+      if (found.att) HOST.att = found.att;
+      Object.keys(ACC).forEach(function(k){ if (/^host:/.test(ACC[k].server || "")) ACC[k].server = HOST.imap; });
+    }).catch(function(){});
+    return Promise.race([lt, sleep(3000)]);
+  }
   var ACC = {
     gmail:{label:"Gmail", server:"Gmail", site:"https://mail.google.com/"},
     all:{label:"전체 메일함", server:null, site:""}
@@ -663,7 +684,7 @@ function fmtSize(n){
       var label = p ? p[1] : a.name;
       if (used[label]) label += " (" + a.name + ")";   // 같은 곳 계정이 여럿이면 이름으로 구분
       used[label] = true;
-      ACC[a.name] = {label: label, server: "host:imap", site: p ? p[3] : ""};
+      ACC[a.name] = {label: label, server: HOST.imap, site: p ? p[3] : ""};
       ACC_COLOR[a.name] = p ? p[2] : IMAP_PALETTE[imapList.length % IMAP_PALETTE.length];
       imapList.push(a.name);
     });
@@ -689,7 +710,7 @@ function fmtSize(n){
   // 계정 목록을 imap 서버에서 다시 읽는다 (PC 확인 창이 뜰 수 있으므로 IMAP을 쓰는 순간에만 부른다)
   function refreshImapAccounts(){
     if (!mcp) return Promise.reject({code: "server_not_connected"});
-    return mcp.callTool("host:imap", "imap_list_accounts", {}, {cache: false}).then(function(r){
+    return mcp.callTool(HOST.imap, "imap_list_accounts", {}, {cache: false}).then(function(r){
       var p = (r && r.payload) || {};
       setImapAccounts(p.accounts || [], true);
       imapListFresh = true;
@@ -779,7 +800,7 @@ function fmtSize(n){
                       : {accountName: account, since: since, searchAllFolders: true, includeTrash: false, limit: 100};
       var who = sent ? "to" : "from";
       var tries = [Object.assign({subject: q}, base), Object.assign((function(){ var o = {}; o[who] = q; return o; })(), base)];
-      return Promise.all(tries.map(function(inp){ return readTool("host:imap", "imap_search_emails", inp, fresh); })).then(function(rs){
+      return Promise.all(tries.map(function(inp){ return readTool(HOST.imap, "imap_search_emails", inp, fresh); })).then(function(rs){
         var seen = {}, items = [], more = false, at = Date.now();
         rs.forEach(function(r){
           var p = r.payload || {}, ms = p.messages || [];
@@ -800,7 +821,7 @@ function fmtSize(n){
     var input = sent
       ? {accountName: account, since: ymd(addDays(b.from, -1), "-"), folder: "Sent Messages", limit: 300 * loadMul}
       : {accountName: account, since: ymd(addDays(b.from, -1), "-"), searchAllFolders: true, includeTrash: false, limit: 300 * loadMul};
-    return readTool("host:imap", "imap_search_emails", input, fresh).then(function(r){
+    return readTool(HOST.imap, "imap_search_emails", input, fresh).then(function(r){
       var p = r.payload || {};
       var ms = p.messages || [], items = [];
       for (var i = 0; i < ms.length; i++){
@@ -857,7 +878,7 @@ function fmtSize(n){
       if (!tf) return {items: [], at: Date.now(), more: false};
       var input = {accountName: acc, folder: tf.name, since: ymd(addDays(startOfDay(new Date()), -365), "-"), limit: 200 * loadMul};
       if (q) input.subject = q;
-      return readTool("host:imap", "imap_search_emails", input, fresh).then(function(r){
+      return readTool(HOST.imap, "imap_search_emails", input, fresh).then(function(r){
         var p = r.payload || {}, ms = p.messages || [], items = [];
         ms.forEach(function(m){
           if (!m.folder) m.folder = tf.name;
@@ -921,11 +942,11 @@ function fmtSize(n){
     if (!x.unread || x.marking || !mcp) return;
     x.marking = true; x.markErr = null; render();
     var call = x.acc
-      ? mcp.callTool("host:imap", "imap_mark_as_read", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      ? mcp.callTool(HOST.imap, "imap_mark_as_read", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
       : mcp.callTool("Gmail", "unlabel_thread", {threadId: x.id, labelIds: ["UNREAD"]}, {cache: false});
     call.then(function(){
       x.unread = false; x.justRead = true; noteState(x);
-      if (x.acc) mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+      if (x.acc) mcp.invalidate(HOST.imap, "imap_search_emails").catch(function(){});
       else mcp.invalidate("Gmail", "search_threads").catch(function(){});
     }).catch(function(e){ x.markErr = e || {code: "upstream_error"}; })
       .then(function(){ x.marking = false; render(); });
@@ -934,7 +955,7 @@ function fmtSize(n){
     if (open[x.id] && !open[x.id].error){ render(); return; }   // 이미 불러온 메일은 다시 불러오지 않는다
     open[x.id] = {loading: true}; render();
     if (x.acc){
-      readTool("host:imap", "imap_get_email", {accountName: x.acc, folder: x.folder, uid: x.uid, bodyFormat: "html", maxContentLength: 600000, includeAttachmentText: false}).then(function(r){
+      readTool(HOST.imap, "imap_get_email", {accountName: x.acc, folder: x.folder, uid: x.uid, bodyFormat: "html", maxContentLength: 600000, includeAttachmentText: false}).then(function(r){
         var e = (r.payload && r.payload.email) || {}, att = [];
         (e.attachments || []).forEach(function(a){
           var n = a && (a.filename || a.name || a.fileName);
@@ -1010,7 +1031,7 @@ function fmtSize(n){
     if (st) return;
     o.atts[a.key] = {loading: true, shown: true}; render();
     var imapCall = function(){
-      return mcp.callTool("host:imap", "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: a.name, extractText: true}, {cache: false});
+      return mcp.callTool(HOST.imap, "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: a.name, extractText: true}, {cache: false});
     };
     var call = x.acc
       // 카카오·네이버: 같은 메일이 Gmail에도 들어와 있으면 거기서 원본 파일을 받는다 (없으면 imap으로)
@@ -1037,7 +1058,7 @@ function fmtSize(n){
       }).catch(function(e){ s.mdError = e || {code: "upstream_error"}; return s; }); };
       // 먼저 PC의 첨부 도우미로 원본 파일을 받아 형식별 미리보기로 연다. 도우미가 없으면 글자로 보여 준다.
       var base = String(s.savedPath).split(/[\\/]/).pop();
-      return mcp.callTool("host:attachments", "read_saved_attachment", {filename: base}, {cache: false}).then(function(r2){
+      return mcp.callTool(HOST.att, "read_saved_attachment", {filename: base}, {cache: false}).then(function(r2){
         var got2 = attFromResult(r2, a.mime);
         if (!got2.blob) return markdown();
         s.blob = got2.blob; s.url = URL.createObjectURL(got2.blob); s.text = "";
@@ -1064,12 +1085,12 @@ function fmtSize(n){
     if (x.deleting || !mcp || !canDelete(x)) return Promise.resolve(false);
     x.deleting = true; x.delErr = null; render();
     var call = x.acc
-      ? mcp.callTool("host:imap", "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      ? mcp.callTool(HOST.imap, "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
       : mcp.callTool("Gmail", "trash_thread", {threadId: x.id}, {cache: false});
     return call.then(function(){
       x.trashed = true; x.confirmDel = false; delete open[x.id]; dropTrashLists(); delete picked[x.id]; noteState(x);
       trashNote = {x: x};
-      if (x.acc) mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+      if (x.acc) mcp.invalidate(HOST.imap, "imap_search_emails").catch(function(){});
       else mcp.invalidate("Gmail", "search_threads").catch(function(){});
       return true;
     }).catch(function(e){ x.delErr = e || {code: "upstream_error"}; return false; })
@@ -1875,7 +1896,7 @@ function fmtSize(n){
       if (pl.pcDrive.length && !c.rcStatus){
         // PC에 rclone이 연결돼 있으면 큰 파일도 여기서 바로 Drive 링크로 보낸다
         c.rcStatus = {checking: true};
-        mcp.callTool("host:attachments", "rclone_status", {}, {cache: false}).then(function(r){
+        mcp.callTool(HOST.att, "rclone_status", {}, {cache: false}).then(function(r){
           var p = (r && r.payload) || {}; c.rcStatus = {ok: !!p.ok, reason: p.reason || ""};
         }, function(){ c.rcStatus = {ok: false, reason: "PC 첨부 도우미 새 버전이 필요해요 (Claude 앱 다시 시작)"}; }).then(function(){ drawFiles(); });
       }
@@ -2012,7 +2033,7 @@ function fmtSize(n){
         function one(){
           var part = file.slice(k * CHUNK, Math.min(file.size, (k + 1) * CHUNK));
           setStatus("PC로 넘기는 중… " + file.name + " (" + (k + 1) + "/" + pieces + ")");
-          return mcp.callTool("host:attachments", "stage_chunk", {uploadId: uid, index: k, total: pieces, name: file.name, dest: "rclone",
+          return mcp.callTool(HOST.att, "stage_chunk", {uploadId: uid, index: k, total: pieces, name: file.name, dest: "rclone",
               base64Content: {$file: {data: part, name: file.name, type: file.type || "application/octet-stream"}}}, {cache: false}).then(function(r){
             var p = (r && r.payload) || {};
             k++;
@@ -2027,15 +2048,15 @@ function fmtSize(n){
       function waitInDrive(info, file){
         var started = Date.now();
         function poll(){
-          return mcp.callTool("host:attachments", "upload_status", {jobId: info.jobId}, {cache: false}).then(function(r){
+          return mcp.callTool(HOST.att, "upload_status", {jobId: info.jobId}, {cache: false}).then(function(r){
             var j = (r && r.payload) || {};
             if (j.state === "done" && j.id) return {id: j.id, viewUrl: "https://drive.google.com/file/d/" + j.id + "/view"};
-            if (j.state === "failed"){ c.pcDone.delete(file); throw {code: "tool_error", server: "host:attachments", message: "Drive에 올리지 못했어요: " + (j.error || "알 수 없는 오류")}; }
+            if (j.state === "failed"){ c.pcDone.delete(file); throw {code: "tool_error", server: HOST.att, message: "Drive에 올리지 못했어요: " + (j.error || "알 수 없는 오류")}; }
             var sec = Math.round((Date.now() - started) / 1000);
             setStatus("Google Drive에 올리는 중… " + file.name + " " + (j.percent || 0) + "% (" + (sec >= 60 ? Math.floor(sec / 60) + "분 " : "") + (sec % 60) + "초) — 창을 닫지 마세요");
             return new Promise(function(res){ setTimeout(res, 2000); }).then(poll);
           }, function(e){
-            if (e && /unknown upload job/i.test(e.message || "")){ c.pcDone.delete(file); throw {code: "tool_error", server: "host:attachments", message: "PC 도우미가 다시 시작돼 업로드가 끊겼어요. 다시 보내 주세요."}; }
+            if (e && /unknown upload job/i.test(e.message || "")){ c.pcDone.delete(file); throw {code: "tool_error", server: HOST.att, message: "PC 도우미가 다시 시작돼 업로드가 끊겼어요. 다시 보내 주세요."}; }
             throw e;
           });
         }
@@ -2071,7 +2092,7 @@ function fmtSize(n){
         }
         if (m === "stage"){   // 카카오·네이버: PC에 잠시 저장하고 경로로 붙인다
           n++; setStatus("첨부를 준비하는 중… (" + n + "/" + staged + ") " + f.name);
-          return mcp.callTool("host:attachments", "stage_file", {name: f.name, base64Content: fileArg(f)}, {cache: false}).then(function(r){
+          return mcp.callTool(HOST.att, "stage_file", {name: f.name, base64Content: fileArg(f)}, {cache: false}).then(function(r){
             var p = (r && r.payload) || {};
             if (!p.path) throw {code: "tool_error", message: "첨부를 PC에 준비하지 못했어요"};
             out.push({filename: f.name, path: p.path, contentType: f.type || undefined});
@@ -2130,7 +2151,7 @@ function fmtSize(n){
       // 보낸메일함 목록은 다음에 열 때 새로 불러온다
       Object.keys(store).forEach(function(k){ if (k.indexOf(acc + "|sent|") === 0 || k.indexOf("all|sent|") === 0) delete store[k]; });
       if (isG) mcp.invalidate("Gmail", "search_threads").catch(function(){});
-      else mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+      else mcp.invalidate(HOST.imap, "imap_search_emails").catch(function(){});
       render();
     }
     function failed(e, what){
@@ -2139,7 +2160,7 @@ function fmtSize(n){
       if (!isG && e && e.code === "tool_error" && /auth|login|535|credential|smtp/i.test(e.message || "")) msg = "보내는 메일 서버 로그인에 실패했어요. " + ACC[acc].label + " 메일 설정에서 SMTP(외부 메일 프로그램) 사용이 켜져 있는지 확인해 주세요.";
       if (!isG && e && e.code === "not_in_manifest") msg = "PC의 imap 연결에 " + (isNew ? "보내기" : "답장") + " 기능이 꺼져 있을 수 있어요. Claude 앱을 다시 시작했는지 확인해 주세요.";
       if (e && e.code === "bad_request") msg = "첨부를 넘기지 못했어요 (파일 형식이나 크기 문제일 수 있어요). " + (e.message ? "(" + String(e.message).slice(0, 80) + ")" : "");
-      if (e && e.server === "host:attachments") msg = "첨부를 PC에 준비하지 못했어요. " + (e.message && /Drive folder/i.test(e.message) ? "Google Drive 데스크톱 앱이 켜져 있고 로그인되어 있는지 확인해 주세요." : "Claude 앱을 다시 시작했는지 확인해 주세요.") + " (" + (e.code || "오류") + ")";
+      if (e && e.server === HOST.att) msg = "첨부를 PC에 준비하지 못했어요. " + (e.message && /Drive folder/i.test(e.message) ? "Google Drive 데스크톱 앱이 켜져 있고 로그인되어 있는지 확인해 주세요." : "Claude 앱을 다시 시작했는지 확인해 주세요.") + " (" + (e.code || "오류") + ")";
       if (e && e.server === "Google Drive" && e.message && /오래 걸려요/.test(e.message)) msg = e.message;
       if (e && e.server === "Google Drive") msg = "Google Drive에 올리거나 공유하지 못했어요. " + (e.code === "server_not_connected" ? "claude.ai 설정에서 Google Drive 커넥터를 연결해 주세요." : "(" + (e.code || "오류") + ")");
       // 조직 정책으로 막힌 기능은 이 창을 다시 열 때 버튼을 숨긴다
@@ -2163,7 +2184,7 @@ function fmtSize(n){
             if (w.atts.length) fi.attachments = w.atts;
             return mcp.callTool("Gmail", "forward", fi, {cache: false});
           }
-          return mcp.callTool("host:imap", "imap_forward_email", {accountName: x.acc, folder: x.folder, uid: x.uid, to: g.to, text: g.text, includeAttachments: true}, {cache: false});
+          return mcp.callTool(HOST.imap, "imap_forward_email", {accountName: x.acc, folder: x.folder, uid: x.uid, to: g.to, text: g.text, includeAttachments: true}, {cache: false});
         }
         if (isNew){
           if (isG){
@@ -2175,7 +2196,7 @@ function fmtSize(n){
           var ii = {accountName: acc, to: g.to, subject: g.subject, text: g.text, html: w.html};
           if (g.cc.length) ii.cc = g.cc;
           if (w.atts.length) ii.attachments = w.atts;
-          return mcp.callTool("host:imap", "imap_send_email", ii, {cache: false});
+          return mcp.callTool(HOST.imap, "imap_send_email", ii, {cache: false});
         }
         if (isG){
           var input = {messageId: last.id, body: g.text, htmlBody: w.html, replyAll: mode === "all", includeSignature: !!(gSig && gSig.checked)};
@@ -2186,7 +2207,7 @@ function fmtSize(n){
         }
         var inp = {accountName: x.acc, folder: x.folder, uid: x.uid, text: g.text, html: w.html, replyAll: mode === "all"};
         if (w.atts.length) inp.attachments = w.atts;
-        return mcp.callTool("host:imap", "imap_reply_to_email", inp, {cache: false});
+        return mcp.callTool(HOST.imap, "imap_reply_to_email", inp, {cache: false});
       }).then(function(){
         if (isDraftMode && draft) return mcp.callTool("Gmail", "delete_draft", {draftId: draft.draftId}, {cache: false}).catch(function(){});
       }).then(function(){ if (isDraftMode) dropDrafts(); after(isNew ? "✓ 메일을 보냈어요. 보낸메일함에 있어요." : isFwd ? "✓ 전달했어요." : "✓ 답장을 보냈어요. 보낸메일함에 있어요."); }, function(e){ failed(e, "보내지"); });
@@ -2240,7 +2261,7 @@ function fmtSize(n){
     function worker(){
       if (i >= jobs.length) return Promise.resolve();
       var j = jobs[i++];
-      return mcp.callTool("host:attachments", "fetch_image", {url: unescAttr(j.raw)}, {cache: false}).then(function(r){
+      return mcp.callTool(HOST.att, "fetch_image", {url: unescAttr(j.raw)}, {cache: false}).then(function(r){
         var d = dataUrlOf(r);
         if (d){ j.m.htmlShown = replaceSrc(j.m.htmlShown || j.m.html, j.raw, d); ok++; }
       }, function(e){ if (!firstErr) firstErr = e || {code: "upstream_error"}; }).then(function(){
@@ -2274,7 +2295,7 @@ function fmtSize(n){
     if (!jobs.length) return;
     o.cidBusy = true;
     Promise.all(jobs.map(function(j){
-      return mcp.callTool("host:imap", "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: j.a.cid}, {cache: false}).then(function(r){
+      return mcp.callTool(HOST.imap, "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: j.a.cid}, {cache: false}).then(function(r){
         var d = dataUrlOf(r);
         if (d) j.m.htmlShown = (j.m.htmlShown || j.m.html).split("cid:" + j.a.cid).join(d);
       }, function(){});
@@ -2479,6 +2500,14 @@ function fmtSize(n){
       b.setAttribute("aria-pressed", String(b.dataset.account === state.account));
       var d = store[keyOf(b.dataset.account)], num = b.querySelector(".num");
       var u = d && d.items ? d.items.filter(function(x){ return x.unread && !x.trashed; }).length : 0;
+      if (b.dataset.account === "all"){
+        // 전체 메일함: 전체 목록과 계정별로 불러온 목록을 합쳐 안 읽은 메일을 센다 (같은 메일은 한 번만)
+        var seen = {};
+        [d].concat(["gmail"].concat(imapNames()).map(function(a){ return store[keyOf(a)]; })).forEach(function(sd){
+          if (sd && sd.items) sd.items.forEach(function(x){ if (x.unread && !x.trashed) seen[(x.acc || "gmail") + "|" + x.id] = 1; });
+        });
+        u = Object.keys(seen).length;
+      }
       num.textContent = u ? String(u) : "";
       num.className = "num" + (u ? " on" : "");
     });
@@ -2685,18 +2714,18 @@ function fmtSize(n){
       .catch(function(e){ bump(x, label + " 못했어요. " + errorText(e, x.acc || "gmail"), true); return false; });
   }
   function invalidateLists(x){
-    if (x.acc) mcp.invalidate("host:imap", "imap_search_emails").catch(function(){});
+    if (x.acc) mcp.invalidate(HOST.imap, "imap_search_emails").catch(function(){});
     else mcp.invalidate("Gmail", "search_threads").catch(function(){});
   }
   function setStar(x, on){
     var call = x.acc
-      ? mcp.callTool("host:imap", on ? "imap_flag_email" : "imap_unflag_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      ? mcp.callTool(HOST.imap, on ? "imap_flag_email" : "imap_unflag_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
       : mcp.callTool("Gmail", on ? "label_thread" : "unlabel_thread", {threadId: x.id, labelIds: ["STARRED"]}, {cache: false});
     return act(x, on ? "별표" : "별표 해제", call, function(){ x.starred = on; invalidateLists(x); });
   }
   function markUnread(x){
     var call = x.acc
-      ? mcp.callTool("host:imap", "imap_mark_as_unread", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
+      ? mcp.callTool(HOST.imap, "imap_mark_as_unread", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
       : mcp.callTool("Gmail", "label_thread", {threadId: x.id, labelIds: ["UNREAD"]}, {cache: false});
     return act(x, "안 읽음 표시", call, function(){ x.unread = true; x.justRead = false; invalidateLists(x); });
   }
@@ -2706,7 +2735,7 @@ function fmtSize(n){
   // 휴지통에서 받은편지함으로 되돌리기
   function restore(x){
     var call = x.acc
-      ? mcp.callTool("host:imap", "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: "INBOX"}, {cache: false})
+      ? mcp.callTool(HOST.imap, "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: "INBOX"}, {cache: false})
       : mcp.callTool("Gmail", "untrash_thread", {threadId: x.id}, {cache: false});
     return act(x, "복원", call, function(){ x._restored = true; removeFromList(x); Object.keys(store).forEach(function(k){ if (k.indexOf("|inbox|") !== -1) delete store[k]; }); });
   }
@@ -2714,7 +2743,7 @@ function fmtSize(n){
   function purge(x){
     if (!x.acc) return;
     return askConfirm("‘" + x.subject + "’ 메일을 영구 삭제할까요? 되돌릴 수 없어요.", "영구 삭제", true).then(function(ok){
-      if (ok) return act(x, "영구 삭제", mcp.callTool("host:imap", "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false}), function(){ x._purged = true; removeFromList(x); });
+      if (ok) return act(x, "영구 삭제", mcp.callTool(HOST.imap, "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false}), function(){ x._purged = true; removeFromList(x); });
     });
   }
 
@@ -2722,7 +2751,7 @@ function fmtSize(n){
   var folderCache = {};
   function imapFolders(acc){
     if (folderCache[acc]) return folderCache[acc];
-    folderCache[acc] = readTool("host:imap", "imap_list_folders", {accountName: acc}).then(function(r){
+    folderCache[acc] = readTool(HOST.imap, "imap_list_folders", {accountName: acc}).then(function(r){
       var p = r.payload, arr = Array.isArray(p) ? p : (p && (p.folders || p.mailboxes)) || [];
       return arr.map(function(fd){ return typeof fd === "string" ? {name: fd} : {name: fd.path || fd.name, use: fd.specialUse || fd.special_use || fd.role || ""}; })
         .filter(function(fd){ return fd.name; });
@@ -2746,7 +2775,7 @@ function fmtSize(n){
         list.textContent = "";
         fds.filter(function(fd){ return fd.name !== x.folder && !/^(Sent Messages|Drafts|Deleted Messages|예약편지함)$/.test(fd.name); }).forEach(function(fd){
           item(fd.name, fd.name === "INBOX" ? "받은편지함" : "", function(){
-            act(x, "‘" + fd.name + "’로 이동", mcp.callTool("host:imap", "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: fd.name}, {cache: false}),
+            act(x, "‘" + fd.name + "’로 이동", mcp.callTool(HOST.imap, "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: fd.name}, {cache: false}),
               function(){ removeFromList(x); });
           });
         });
@@ -2776,7 +2805,7 @@ function fmtSize(n){
     imapFolders(x.acc).then(function(fds){
       var junk = fds.filter(function(fd){ return /junk/i.test(fd.use) || /^(스팸편지함|Junk|Spam|스팸)$/i.test(fd.name); })[0];
       if (!junk) throw {code: "tool_error", message: "스팸함을 찾지 못했어요"};
-      return act(x, "스팸 신고", mcp.callTool("host:imap", "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: junk.name}, {cache: false}), function(){ removeFromList(x); });
+      return act(x, "스팸 신고", mcp.callTool(HOST.imap, "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: junk.name}, {cache: false}), function(){ removeFromList(x); });
     }).catch(function(e){ bump(x, "스팸 신고 못했어요. " + (e && e.message ? e.message : errorText(e, x.acc)), true); });
   }
   // 수신 거부 링크: 본문에서 '수신 거부·unsubscribe' 링크를 찾는다
@@ -3161,7 +3190,9 @@ function fmtSize(n){
     ? window.claude.use("mcp").catch(function(){ return null; })
     : Promise.resolve(null);
   boot.then(function(ns){
-    mcp = ns || null; mcpReady = true;
+    mcp = ns || null;
+    return resolveHosts().then(function(){ mcpReady = true; return ns; });
+  }).then(function(ns){
     // 카카오·네이버가 마지막 선택이었어도 첫 화면은 Gmail로 연다. PC 확인 창이 페이지를 열자마자 뜨지 않게 하려는 것.
     if (state.account !== "gmail"){ state.account = "gmail"; }
     load(false);

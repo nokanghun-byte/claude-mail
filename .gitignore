@@ -3,3 +3,7 @@ rclone.conf
 accounts.json
 node_modules/
 _ui_test/
+extension/node_modules/
+extension/server/imap-core.mjs
+extension/server/attachments.js
+dist/
