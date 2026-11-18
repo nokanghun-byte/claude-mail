@@ -83,9 +83,14 @@ const TOOLS = [{
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
 }, {
   name: "rclone_status",
-  description: "Tell whether rclone is installed and connected to Google Drive (remote 'gdrive'), for uploading large email attachments.",
+  description: "Tell whether large email attachments can be uploaded to Google Drive (built-in Google sign-in, or rclone remote 'gdrive'). Returns ok, via, and canLogin when drive_login can connect it.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+}, {
+  name: "drive_login",
+  description: "Start Google sign-in in the browser so large email attachments can be uploaded straight to the user's Google Drive (drive.file scope: only files this app uploads). Poll rclone_status to see when it is connected.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
 }, {
   name: "upload_status",
   description: "Progress of a large-file upload started by stage_chunk with dest \"rclone\". Returns state (uploading/done/failed), percent, the Drive file id when done, and the final title.",
@@ -129,12 +134,12 @@ function stageChunk(id, args){
   if (index < total - 1) return reply(id, { content: [{ type: "text", text: JSON.stringify({done: false, received: size}) }] });
   // 마지막 조각 + rclone: 원래 이름으로 바꿔 두고 rclone 업로드를 시작한다 (끝날 때까지 기다리지 않는다)
   if (args && args.dest === "rclone"){
-    if (!findRclone()){ try { fs.unlinkSync(part); } catch (e){} return toolError(id, "rclone not installed"); }
+    if (!nativeOk() && !findRclone()){ try { fs.unlinkSync(part); } catch (e){} return toolError(id, "Google Drive is not connected (run drive_login)"); }
     const dir = path.join(CHUNK_DIR, uploadId);
     fs.mkdirSync(dir, {recursive: true});
     const file = path.join(dir, name);
     try { fs.renameSync(part, file); } catch (e){ fs.copyFileSync(part, file); try { fs.unlinkSync(part); } catch (e2){} }
-    startRcloneJob(uploadId, file, name);
+    if (nativeOk()) startNativeJob(uploadId, file, name); else startRcloneJob(uploadId, file, name);
     return reply(id, { content: [{ type: "text", text: JSON.stringify({done: true, jobId: uploadId, size}) }] });
   }
   // 마지막 조각: Drive 폴더로 옮긴다 (같은 이름이 있으면 번호를 붙인다)
@@ -154,6 +159,8 @@ function stageChunk(id, args){
 // 페이지는 큰 파일을 조각으로 넘기고(stage_chunk, dest: "rclone"), 다 모이면 rclone이 Drive의 '메일 첨부' 폴더로 올린다.
 // 올리는 데 오래 걸리므로 바로 작업 번호를 돌려주고, 페이지가 upload_status로 진행을 묻는다.
 const { spawn } = require("child_process");
+let gdrive = null; try { gdrive = require("./drive.js"); } catch (e){}   // 내장 Google 로그인 (없으면 rclone만)
+function nativeOk(){ try { return !!(gdrive && gdrive.status().connected); } catch (e){ return false; } }
 const REMOTE = "gdrive";
 const REMOTE_DIR = "메일 첨부";
 function findRclone(){
@@ -185,11 +192,14 @@ function runRclone(args){
   });
 }
 async function rcloneStatus(id){
+  if (nativeOk()) return reply(id, { content: [{ type: "text", text: JSON.stringify({ok: true, via: "google"}) }] });
+  const st = gdrive ? gdrive.status() : null;
+  const canLogin = !!(st && st.hasClient), pending = !!(st && st.login && st.login.pending);
   const exe = findRclone();
-  if (!exe) return reply(id, { content: [{ type: "text", text: JSON.stringify({ok: false, reason: "rclone이 설치되어 있지 않아요"}) }] });
+  if (!exe) return reply(id, { content: [{ type: "text", text: JSON.stringify({ok: false, canLogin, pending, reason: canLogin ? "Google Drive에 아직 로그인하지 않았어요" : "Google Drive 연결 정보가 없어요"}) }] });
   const r = await runRclone(["listremotes"]);
   const ok = r.code === 0 && r.out.split(/\r?\n/).some(l => l.trim() === REMOTE + ":");
-  reply(id, { content: [{ type: "text", text: JSON.stringify(ok ? {ok: true} : {ok: false, reason: "rclone에 Google Drive가 연결되어 있지 않아요"}) }] });
+  reply(id, { content: [{ type: "text", text: JSON.stringify(ok ? {ok: true, via: "rclone"} : {ok: false, canLogin, pending, reason: "Google Drive가 연결되어 있지 않아요"}) }] });
 }
 const jobs = new Map();
 async function startRcloneJob(jobId, file, name){
@@ -225,6 +235,18 @@ async function startRcloneJob(jobId, file, name){
   } finally {
     try { fs.rmSync(path.dirname(file), {recursive: true, force: true}); } catch (e){}
   }
+}
+async function startNativeJob(jobId, file, name){
+  const job = {state: "uploading", percent: 0, title: name, error: "", id: ""};
+  jobs.set(jobId, job);
+  try { job.id = await gdrive.upload(file, name, job); job.state = "done"; job.percent = 100; }
+  catch (e){ job.state = "failed"; job.error = String(e && e.message || e).slice(0, 300); }
+  finally { try { fs.rmSync(path.dirname(file), {recursive: true, force: true}); } catch (e){} }
+}
+async function driveLogin(id){
+  if (!gdrive) return toolError(id, "built-in Google sign-in is not available");
+  try { const r = await gdrive.startLogin(); reply(id, { content: [{ type: "text", text: JSON.stringify(r) }] }); }
+  catch (e){ toolError(id, "login failed: " + (e && e.message)); }
 }
 function uploadStatus(id, args){
   const job = jobs.get(String(args && args.jobId || ""));
@@ -377,6 +399,7 @@ function handle(msg){
       if (name === "stage_chunk") return stageChunk(id, params.arguments || {});
       if (name === "rclone_status"){ pending++; return rcloneStatus(id).finally(() => { pending--; if (ended && !pending) process.exit(0); }); }
       if (name === "upload_status") return uploadStatus(id, params.arguments || {});
+      if (name === "drive_login") return driveLogin(id);
       if (name === "fetch_image"){ pending++; return fetchImage(id, params.arguments || {}).finally(() => { pending--; if (ended && !pending) process.exit(0); }); }
       return fail(id, -32602, "unknown tool: " + name);
     } catch (e){ return toolError(id, "read failed: " + (e && e.message)); }

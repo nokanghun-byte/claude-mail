@@ -138,8 +138,17 @@ a{color:inherit}
 .msubj{font-size:15px;font-weight:500;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msnip{font-size:13.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .unread .mfrom{color:var(--ink);font-weight:700}
-.unread .msubj{color:var(--ink);font-weight:700}
-.udot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent);align-self:center}
+.unread .msubj{color:var(--ink);font-weight:800}
+.unread .msnip{color:var(--muted)}
+.mrow.unread{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.mrow.unread:hover{background:color-mix(in srgb,var(--accent) 14%,var(--surface2))}
+.mrow:not(.unread) .mfrom,.mrow:not(.unread) .msubj{font-weight:400}
+.mrow:not(.unread) .msubj{color:var(--muted)}
+.mrow:not(.unread) .msnip{color:var(--faint);opacity:.85}
+.mrow:not(.unread) .av{opacity:.55;filter:saturate(.6)}
+.mrow:not(.unread)[aria-current="true"] .av{opacity:1;filter:none}
+.udot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent);align-self:center;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.rdot{flex:none;font-size:11.5px;font-weight:600;color:var(--faint);align-self:center}
 .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
 .tag{font-size:12px;font-weight:600;border-radius:6px;padding:1px 7px;background:var(--surface2);color:var(--muted);white-space:nowrap}
 .tag.cat{color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
@@ -1051,7 +1060,9 @@ function fmtSize(n){
       s.text = p.textContent || "";
       s.savedPath = p.path || "";
       if (!s.savedPath) return s;
-      var markdown = function(){ return mcp.callTool("host:markitdown", "convert_to_markdown", {uri: fileUri(s.savedPath)}, {cache: false}).then(function(m){
+      var markdown = function(){
+        var viaExt = /\.(docx|xlsx|xlsm|xls|csv|ods|pptx)$/i.test(s.savedPath) ? mcp.callTool(HOST.att, "convert_document", {path: s.savedPath}, {cache: false}) : Promise.reject({code: "skip"});
+        return viaExt.catch(function(){ return mcp.callTool("host:markitdown", "convert_to_markdown", {uri: fileUri(s.savedPath)}, {cache: false}); }).then(function(m){
         var v = m && m.payload;
         s.md = typeof v === "string" ? v : (v && typeof v.result === "string" ? v.result : "");
         return s;
@@ -1897,7 +1908,7 @@ function fmtSize(n){
         // PC에 rclone이 연결돼 있으면 큰 파일도 여기서 바로 Drive 링크로 보낸다
         c.rcStatus = {checking: true};
         mcp.callTool(HOST.att, "rclone_status", {}, {cache: false}).then(function(r){
-          var p = (r && r.payload) || {}; c.rcStatus = {ok: !!p.ok, reason: p.reason || ""};
+          var p = (r && r.payload) || {}; c.rcStatus = {ok: !!p.ok, reason: p.reason || "", canLogin: !!p.canLogin};
         }, function(){ c.rcStatus = {ok: false, reason: "PC 첨부 도우미 새 버전이 필요해요 (Claude 앱 다시 시작)"}; }).then(function(){ drawFiles(); });
       }
       if (pl.pcDrive.length && c.rcStatus && (c.rcStatus.ok || c.rcStatus.checking)){
@@ -1905,6 +1916,25 @@ function fmtSize(n){
       } else if (pl.pcDrive.length){
         var gw = el("div", "gmailweb");
         if (c.rcStatus && c.rcStatus.reason) gw.appendChild(el("span", "status bad", c.rcStatus.reason));
+        if (c.rcStatus && c.rcStatus.canLogin){
+          var lg = el("button", "btn primary", c.rcStatus.loggingIn ? "브라우저에서 로그인하는 중…" : "Google Drive 연결하기"); lg.type = "button"; lg.disabled = !!c.rcStatus.loggingIn;
+          lg.addEventListener("click", function(){
+            c.rcStatus.loggingIn = true; drawFiles();
+            mcp.callTool(HOST.att, "drive_login", {}, {cache: false}).then(function(){
+              var tries = 0;
+              (function wait(){
+                mcp.callTool(HOST.att, "rclone_status", {}, {cache: false}).then(function(r){
+                  var p = (r && r.payload) || {};
+                  if (p.ok){ c.rcStatus = {ok: true}; drawFiles(); return; }
+                  if (++tries < 100 && c.rcStatus.loggingIn) setTimeout(wait, 3000); else { c.rcStatus.loggingIn = false; drawFiles(); }
+                }, function(){ c.rcStatus.loggingIn = false; drawFiles(); });
+              })();
+            }, function(e){ c.rcStatus.loggingIn = false; c.rcStatus.reason = "Google 로그인을 시작하지 못했어요 (" + ((e && e.code) || "error") + ")"; drawFiles(); });
+          });
+          gw.appendChild(el("span", null, "한 번만 Google 계정으로 로그인하면, 16MB가 넘는 파일도 여기서 바로 내 Drive에 올려 링크로 보내요."));
+          gw.appendChild(lg);
+          gw.appendChild(el("span", "cnote", "또는"));
+        }
         gw.appendChild(el("span", null, "16MB가 넘는 파일(" + pl.pcDrive.map(function(x){ return x.name; }).join(", ") + ")은 이 화면에서 보낼 수 없어요. Gmail 웹 작성 창을 열어 드릴게요 — 받는 사람·제목·본문은 채워져 있으니 파일만 끌어다 놓으면 Gmail이 Drive 링크로 보내요." +
           (isG ? "" : " (Gmail 계정으로 보내져요)") + (!isNew && !isFwd ? " 기존 대화에 이어지지 않고 새 메일로 가요." : "")));
         var ga = el("a", "btn primary", "Gmail에서 이어 쓰기"); ga.target = "_blank"; ga.rel = "noopener noreferrer"; ga.href = gmailComposeUrl();
@@ -2634,7 +2664,8 @@ function fmtSize(n){
         var mm = el("div", "mmain");
         var t1 = el("div", "mtop");
         t1.appendChild(el("span", "mfrom", (x.sent && !x.inTrash ? "받는 사람: " : "") + x.from + (x.count > 1 ? " (" + x.count + ")" : "")));
-        if (x.unread) t1.appendChild(el("span", "udot"));
+        if (x.unread){ var ud = el("span", "udot"); ud.title = "안 읽음"; ud.setAttribute("aria-label", "안 읽음"); t1.appendChild(ud); }
+        else if (!x.sent && !x.isDraft) t1.appendChild(el("span", "rdot", "읽음"));
         if (x.starred) t1.appendChild(el("span", "star on", "★"));
         t1.appendChild(el("span", "mtime", fmtTime(x.dateMs, wide || state.range === "month" || !!state.q || x.isDraft)));
         mm.appendChild(t1);
@@ -2696,9 +2727,13 @@ function fmtSize(n){
       restore();
       var added = list.filter(function(n){ return before.indexOf(n) === -1; });
       if (added.length){ state.account = added[0]; sel = null; persist(); load(false); return; }   // 새로 추가된 계정을 바로 연다
+      mcp.callTool(HOST.att, "open_account_setup", {}, {cache: false}).then(function(){
+        askConfirm("브라우저에 메일 계정 등록 화면을 열었어요. 네이버·카카오·다음·아웃룩·회사 메일 등 IMAP 메일을 등록한 뒤 이 버튼을 다시 누르면 왼쪽 메뉴에 나타나요. (메일 설정에서 IMAP/SMTP 사용을 켜고 앱 비밀번호를 만들어 두세요)", "확인");
+      }, function(){
       askConfirm((list.length ? "새로 추가된 계정이 없어요. " : "등록된 메일 계정이 없어요. ") +
         "Claude 채팅에서 \"네이버 메일 계정 추가해줘\"처럼 말하면 등록할 수 있어요(네이버·카카오·다음·아웃룩·회사 메일 등 IMAP 메일 모두). " +
         "메일 설정에서 IMAP/SMTP 사용을 켜고 앱 비밀번호를 만들어 두세요. 등록한 뒤 이 버튼을 다시 누르면 왼쪽 메뉴에 나타나요.", "확인");
+      });
     }).catch(function(e){
       restore();
       askConfirm("IMAP 메일을 불러오지 못했어요. " + errorText(e || {code: "server_not_connected"}, "imap") + " Claude 앱 설정 → 확장 프로그램에서 'Claude Mail'이 설치되어 켜져 있는지 확인해 주세요.", "확인");

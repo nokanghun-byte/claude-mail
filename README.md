@@ -51,12 +51,13 @@ IMAP 연결은 오픈소스 [imap-mcp-server](https://www.npmjs.com/package/imap
 
 1. [Releases](https://github.com/nokanghun-byte/claude-mail/releases/latest)에서 `claude-mail.mcpb`를 받습니다.
 2. Claude 데스크톱 앱 **설정 → 확장 프로그램(Extensions)** 화면에 파일을 끌어다 놓거나, **고급 설정 → 확장 프로그램 설치**로 고른 뒤 **설치**를 누릅니다.
-3. Claude에게 메일 계정을 등록해 달라고 말합니다. 예) "네이버 메일 계정 추가해줘. 주소는 ○○@naver.com이고 앱 비밀번호는 내가 직접 넣을게."
+3. Claude 채팅의 **+ → Claude Mail → 메일 페이지 만들기**를 고르면 Claude가 메일 페이지를 만들어 줍니다.
+4. 페이지 왼쪽의 **'메일 계정 추가'** 를 누르면 브라우저에 계정 등록 화면이 열립니다. (또는 Claude에게 "네이버 메일 계정 추가해줘"라고 말해도 됩니다)
    - 메일 쪽 설정에서 **IMAP/SMTP 사용**을 켜고 **앱 비밀번호**를 만들어 두세요.
    - 계정 정보는 내 PC에만 암호화되어 저장됩니다.
-4. Claude 설정 → 커넥터에서 **Gmail**, **Google Drive**를 연결합니다.
-5. Claude에게 이렇게 부탁합니다.
-   > `page/claude-mail.html`을 아티팩트로 게시해줘. 권한은 `page/capabilities.json`대로 선언해줘.
+5. Claude 설정 → 커넥터에서 **Gmail**, **Google Drive**를 연결합니다.
+
+워드·엑셀·파워포인트 첨부 미리보기, 큰 첨부파일 Drive 업로드(페이지의 **'Google Drive 연결하기'**)까지 확장 프로그램에 들어 있습니다. Windows와 macOS를 지원합니다.
 
 **직접 설정하는 방법 (개발자용)**
 
@@ -66,18 +67,16 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1
 Node.js가 필요하며, Claude 앱 설정 파일에 `imap`·`attachments` 서버를 추가합니다. 확장 프로그램을 직접 만들려면 `extension\build.ps1`을 실행하세요.
 ### Google Drive 연결 (선택, 16MB 넘는 첨부파일용)
 
+확장 프로그램이 Google에 직접 로그인해 내 Drive에 올립니다(rclone 불필요). 이를 위해 '데스크톱 앱' OAuth 클라이언트가 하나 필요합니다.
+
 1. [Google Cloud 콘솔](https://console.cloud.google.com/projectcreate)에서 새 프로젝트를 만듭니다. (무료, 결제 정보 불필요)
 2. **Google Drive API**를 사용 설정합니다.
-3. **Google 인증 플랫폼 → 개요 → 시작하기**: 앱 이름, 지원 이메일, 대상 **외부**, 연락처 이메일을 넣고 만듭니다.
-4. **대상 → 앱 게시**로 프로덕션에 게시합니다. (테스트 상태로 두면 7일마다 다시 로그인해야 합니다)
-5. **클라이언트 → 클라이언트 만들기 → 데스크톱 앱**을 만들고 ID와 보안 비밀번호를 복사합니다.
-6. 실행합니다.
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File install\rclone-setup.ps1
-   ```
+3. **Google 인증 플랫폼 → 개요 → 시작하기**: 앱 이름, 지원 이메일, 대상 **외부**, 연락처 이메일을 넣고 만듭니다. **대상 → 앱 게시**로 프로덕션에 게시합니다.
+4. **클라이언트 → 클라이언트 만들기 → 데스크톱 앱**을 만듭니다.
+5. Claude 앱 **설정 → 확장 프로그램 → Claude Mail → 설정**에 클라이언트 ID와 보안 비밀번호를 넣습니다.
+6. 메일 쓰기 창에서 큰 파일을 넣고 **'Google Drive 연결하기'** 를 눌러 로그인합니다.
 
-이 앱은 `drive.file` 권한만 씁니다. **이 앱이 직접 올린 파일만** 볼 수 있고, 내 Drive의 다른 파일에는 접근하지 못합니다.
-
+이 앱은 `drive.file` 권한만 씁니다. **이 앱이 직접 올린 파일만** 볼 수 있고, 내 Drive의 다른 파일에는 접근하지 못합니다. (이미 rclone에 `gdrive`를 연결해 두었다면 그 설정을 그대로 씁니다)
 ### 개인정보
 
 모든 처리는 내 PC와 내 Claude 계정 안에서 일어나며, 이 프로젝트가 따로 수집하는 정보는 없습니다. 자세한 내용은 [개인정보처리방침](docs/privacy.md)을 보세요.
@@ -128,12 +127,13 @@ IMAP access uses the open-source [imap-mcp-server](https://www.npmjs.com/package
 
 1. Download `claude-mail.mcpb` from [Releases](https://github.com/nokanghun-byte/claude-mail/releases/latest).
 2. In the Claude desktop app, open **Settings → Extensions**, drag the file in (or use **Advanced settings → Install Extension…**) and click **Install**.
-3. Ask Claude to add your mail account, e.g. "Add my Naver mail account."
+3. In a Claude chat, choose **+ → Claude Mail → make_mail_page** and Claude builds the mail page for you.
+4. Click **'메일 계정 추가' (Add mail account)** in the page to open the account setup page in your browser (or just ask Claude to add your account).
    - Turn on **IMAP/SMTP access** in your mail settings and create an **app password**.
    - Credentials are stored encrypted on your PC only.
-4. In Claude settings → Connectors, connect **Gmail** and **Google Drive**.
-5. Ask Claude:
-   > Publish `page/claude-mail.html` as an artifact, declaring the capabilities in `page/capabilities.json`.
+5. In Claude settings → Connectors, connect **Gmail** and **Google Drive**.
+
+Word/Excel/PowerPoint previews and large-attachment uploads to Drive (**'Google Drive 연결하기'** in the page) are built in. Windows and macOS are supported.
 
 **Manual setup (for developers)**
 
@@ -143,18 +143,16 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1
 Requires Node.js; adds `imap` and `attachments` servers to the Claude app config. To build the extension yourself, run `extension\build.ps1`.
 ### Google Drive link (optional, for attachments over 16 MB)
 
+The extension signs in to Google itself and uploads to your Drive (no rclone needed). It needs one "Desktop app" OAuth client.
+
 1. Create a project in the [Google Cloud console](https://console.cloud.google.com/projectcreate) (free, no billing needed).
 2. Enable the **Google Drive API**.
-3. **Google Auth Platform → Overview → Get started**: app name, support email, audience **External**, contact email.
-4. **Audience → Publish app** to production (in testing mode you must sign in again every 7 days).
-5. **Clients → Create client → Desktop app**, then copy the client ID and secret.
-6. Run:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File install\rclone-setup.ps1
-   ```
+3. **Google Auth Platform → Overview → Get started**: app name, support email, audience **External**, contact email; then **Audience → Publish app**.
+4. **Clients → Create client → Desktop app**.
+5. Enter the client ID and secret in Claude **Settings → Extensions → Claude Mail → Configure**.
+6. In the compose window, add a large file and click **'Google Drive 연결하기' (Connect Google Drive)** to sign in.
 
-The app only uses the `drive.file` scope: it can see **only the files it uploaded itself**, never the rest of your Drive.
-
+Only the `drive.file` scope is used: the app sees **only files it uploaded**, never the rest of your Drive. (An existing rclone `gdrive` remote is reused if present.)
 ### Privacy
 
 Everything happens on your PC and in your own Claude account; this project collects no data. See the [privacy policy](docs/privacy.md).

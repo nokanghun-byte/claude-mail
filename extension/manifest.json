@@ -1,28 +1,78 @@
 {
-  "manifest_version": "0.3",
-  "name": "claude-mail",
-  "display_name": "Claude Mail",
-  "version": "1.0.2",
-  "description": "Gmail과 IMAP 메일(네이버·카카오·다음·아웃룩·회사 메일 등)을 Claude 메일 페이지에서 쓰게 해 주는 연결 프로그램",
-  "long_description": "Claude 메일 페이지가 쓰는 로컬 서버입니다. IMAP을 지원하는 모든 메일 계정을 읽고 보내며, 첨부파일 미리보기와 큰 첨부파일 업로드를 돕습니다. 계정은 Claude에게 '네이버 메일 계정 추가해줘'처럼 말해서 등록할 수 있습니다.\n\nThe local server used by the Claude Mail page. Reads and sends mail for any IMAP account and helps with attachment previews and large uploads. Add accounts by asking Claude, e.g. 'add my Naver mail account'.",
-  "author": { "name": "nokanghun-byte", "url": "https://github.com/nokanghun-byte" },
-  "homepage": "https://nokanghun-byte.github.io/claude-mail/",
-  "repository": { "type": "git", "url": "https://github.com/nokanghun-byte/claude-mail" },
-  "license": "MIT",
-  "keywords": ["email", "imap", "gmail", "naver", "kakao", "webmail", "메일"],
-  "privacy_policies": ["https://nokanghun-byte.github.io/claude-mail/privacy.html"],
-  "server": {
-    "type": "node",
-    "entry_point": "server/index.mjs",
-    "mcp_config": {
-      "command": "node",
-      "args": ["${__dirname}/server/index.mjs"],
-      "env": {}
-    }
-  },
-  "tools_generated": true,
-  "compatibility": {
-    "platforms": ["win32"],
-    "runtimes": { "node": ">=22.12.0" }
-  }
+    "manifest_version":  "0.3",
+    "name":  "claude-mail",
+    "display_name":  "Claude Mail",
+    "version":  "1.1.0",
+    "description":  "Gmail과 IMAP 메일(네이버·카카오·다음·아웃룩·회사 메일 등)을 Claude 메일 페이지에서 쓰게 해 주는 연결 프로그램",
+    "long_description":  "Claude 메일 페이지가 쓰는 로컬 서버입니다. IMAP을 지원하는 모든 메일 계정을 읽고 보내며, 첨부파일 미리보기와 큰 첨부파일 업로드를 돕습니다. 계정은 Claude에게 \u0027네이버 메일 계정 추가해줘\u0027처럼 말해서 등록할 수 있습니다.\n\nThe local server used by the Claude Mail page. Reads and sends mail for any IMAP account and helps with attachment previews and large uploads. Add accounts by asking Claude, e.g. \u0027add my Naver mail account\u0027.",
+    "author":  {
+                   "name":  "nokanghun-byte",
+                   "url":  "https://github.com/nokanghun-byte"
+               },
+    "homepage":  "https://nokanghun-byte.github.io/claude-mail/",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "https://github.com/nokanghun-byte/claude-mail"
+                   },
+    "license":  "MIT",
+    "keywords":  [
+                     "email",
+                     "imap",
+                     "gmail",
+                     "naver",
+                     "kakao",
+                     "webmail",
+                     "메일"
+                 ],
+    "privacy_policies":  [
+                             "https://nokanghun-byte.github.io/claude-mail/privacy.html"
+                         ],
+    "server":  {
+                   "type":  "node",
+                   "entry_point":  "server/index.mjs",
+                   "mcp_config":  {
+                                      "command":  "node",
+                                      "args":  [
+                                                   "${__dirname}/server/index.mjs"
+                                               ],
+                                      "env":  {
+                                                  "CLAUDE_MAIL_GOOGLE_CLIENT_ID":  "${user_config.google_client_id}",
+                                                  "CLAUDE_MAIL_GOOGLE_CLIENT_SECRET":  "${user_config.google_client_secret}"
+                                              }
+                                  }
+               },
+    "tools_generated":  true,
+    "compatibility":  {
+                          "platforms":  [
+                                            "win32",
+                                            "darwin"
+                                        ],
+                          "runtimes":  {
+                                           "node":  "\u003e=22.12.0"
+                                       }
+                      },
+    "user_config":  {
+                        "google_client_id":  {
+                                                 "type":  "string",
+                                                 "title":  "Google 클라이언트 ID (선택)",
+                                                 "description":  "16MB가 넘는 첨부파일을 Google Drive로 보낼 때 쓰는 \u0027데스크톱 앱\u0027 OAuth 클라이언트 ID. 비워 두면 rclone 설정을 찾아 씁니다.",
+                                                 "required":  false,
+                                                 "default":  ""
+                                             },
+                        "google_client_secret":  {
+                                                     "type":  "string",
+                                                     "title":  "Google 클라이언트 보안 비밀번호 (선택)",
+                                                     "description":  "위 클라이언트 ID의 보안 비밀번호",
+                                                     "required":  false,
+                                                     "sensitive":  true,
+                                                     "default":  ""
+                                                 }
+                    },
+    "prompts":  [
+                    {
+                        "name":  "make_mail_page",
+                        "description":  "Claude 메일 페이지 만들기 (Gmail + IMAP 메일을 한 화면에서)",
+                        "text":  "Claude Mail 확장 프로그램의 get_mail_page 도구로 메일 페이지 HTML과 권한 목록을 받아 아티팩트로 게시해 줘."
+                    }
+                ]
 }
