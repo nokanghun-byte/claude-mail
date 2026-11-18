@@ -36,6 +36,9 @@ function readRcloneClient(){
 function client(){
   const id = (process.env.CLAUDE_MAIL_GOOGLE_CLIENT_ID || "").trim(), secret = (process.env.CLAUDE_MAIL_GOOGLE_CLIENT_SECRET || "").trim();
   if (id && secret && !/^\$\{/.test(id)) return { id, secret, from: "settings" };
+  // 한 번 로그인하면 클라이언트 정보도 토큰 파일에 같이 저장해 두므로, 이후에는 rclone 설정이 없어도 된다
+  const t = loadToken();
+  if (t && t.client_id && t.client_secret) return { id: t.client_id, secret: t.client_secret, from: "saved" };
   return readRcloneClient();
 }
 function loadToken(){ try { return JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8")); } catch (e){ return null; } }
@@ -83,7 +86,7 @@ function startLogin(){
         });
         const j = await r.json();
         if (!r.ok || !j.refresh_token) throw new Error(j.error_description || j.error || "no refresh token");
-        saveToken({ client_id: c.id, refresh_token: j.refresh_token, access_token: j.access_token, expires_at: Date.now() + (j.expires_in || 3600) * 1000 - 60000 });
+        saveToken({ client_id: c.id, client_secret: c.secret, refresh_token: j.refresh_token, access_token: j.access_token, expires_at: Date.now() + (j.expires_in || 3600) * 1000 - 60000 });
         login.done = true;
         page("Google Drive 연결 완료");
       } catch (e){

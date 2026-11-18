@@ -76,7 +76,7 @@ Node.js가 필요하며, Claude 앱 설정 파일에 `imap`·`attachments` 서�
 5. Claude 앱 **설정 → 확장 프로그램 → Claude Mail → 설정**에 클라이언트 ID와 보안 비밀번호를 넣습니다.
 6. 메일 쓰기 창에서 큰 파일을 넣고 **'Google Drive 연결하기'** 를 눌러 로그인합니다.
 
-이 앱은 `drive.file` 권한만 씁니다. **이 앱이 직접 올린 파일만** 볼 수 있고, 내 Drive의 다른 파일에는 접근하지 못합니다. (이미 rclone에 `gdrive`를 연결해 두었다면 그 설정을 그대로 씁니다)
+이 앱은 `drive.file` 권한만 씁니다. **이 앱이 직접 올린 파일만** 볼 수 있고, 내 Drive의 다른 파일에는 접근하지 못합니다. (한 번 로그인하면 이후에는 이 설정 없이도 계속 연결됩니다)
 ### 개인정보
 
 모든 처리는 내 PC와 내 Claude 계정 안에서 일어나며, 이 프로젝트가 따로 수집하는 정보는 없습니다. 자세한 내용은 [개인정보처리방침](docs/privacy.md)을 보세요.
@@ -152,7 +152,7 @@ The extension signs in to Google itself and uploads to your Drive (no rclone nee
 5. Enter the client ID and secret in Claude **Settings → Extensions → Claude Mail → Configure**.
 6. In the compose window, add a large file and click **'Google Drive 연결하기' (Connect Google Drive)** to sign in.
 
-Only the `drive.file` scope is used: the app sees **only files it uploaded**, never the rest of your Drive. (An existing rclone `gdrive` remote is reused if present.)
+Only the `drive.file` scope is used: the app sees **only files it uploaded**, never the rest of your Drive. (After the first sign-in it stays connected on its own.)
 ### Privacy
 
 Everything happens on your PC and in your own Claude account; this project collects no data. See the [privacy policy](docs/privacy.md).
