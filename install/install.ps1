@@ -52,7 +52,7 @@ foreach ($k in $servers.Keys) {
 Say "설정에 서버를 추가했어요. (백업: $cfg.bak_claude-mail)" "Green"
 
 # 4) 네이버·카카오 계정 (선택)
-$a = Read-Host "네이버·카카오 메일 계정을 지금 등록할까요? (y/n)"
+$a = Read-Host "Gmail 말고 다른 메일(네이버·카카오·다음·아웃룩·회사 메일 등) 계정을 지금 등록할까요? (y/n)"
 if ($a -eq "y") {
   Say "브라우저에 계정 등록 화면이 열려요. 메일 주소와 앱 비밀번호를 넣고 저장하세요. 다 하면 이 창에서 Ctrl+C."
   & $npx -y -p imap-mcp-server@2.2.0 imap-setup

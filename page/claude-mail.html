@@ -98,6 +98,8 @@ a{color:inherit}
 .navbtn .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .navbtn .num{font-size:13px;font-weight:600;color:var(--faint);font-variant-numeric:tabular-nums}
 .navbtn .num.on{color:var(--accent)}
+.navbtn.imaplink{color:var(--faint);font-size:14px}
+.navbtn.imaplink .ic{background:var(--surface2);color:var(--ink2)}
 .side-foot{margin:auto 10px 0;padding-top:18px;font-size:12px;line-height:1.55;color:var(--faint)}
 .side-foot a{color:inherit}
 
@@ -368,8 +370,7 @@ a{color:inherit}
     <nav class="nav" id="accts" aria-label="메일 계정">
       <button type="button" class="navbtn" data-account="all" style="--c:#3182F6"><span class="ic">전</span><span class="lbl">전체 메일함</span><span class="num"></span></button>
       <button type="button" class="navbtn" data-account="gmail" style="--c:#EA4335"><span class="ic">G</span><span class="lbl">Gmail</span><span class="num"></span></button>
-      <button type="button" class="navbtn" data-account="kakao" style="--c:#F7C600"><span class="ic">K</span><span class="lbl">카카오</span><span class="num"></span></button>
-      <button type="button" class="navbtn" data-account="naver" style="--c:#03C75A"><span class="ic">N</span><span class="lbl">네이버</span><span class="num"></span></button>
+      <button type="button" class="navbtn imaplink" id="imapLink" style="--c:var(--faint)"><span class="ic">+</span><span class="lbl">다른 메일 연결</span></button>
     </nav>
     <div class="side-h">메일함</div>
     <nav class="nav" id="boxes" aria-label="메일함">
@@ -629,11 +630,78 @@ function fmtSize(n){
   var trashNote = null;    // 방금 휴지통으로 옮긴 메일 {x, undoing, error, undone}
   var ACC = {
     gmail:{label:"Gmail", server:"Gmail", site:"https://mail.google.com/"},
-    kakao:{label:"카카오", server:"host:imap", site:"https://mail.kakao.com/"},
-    naver:{label:"네이버", server:"host:imap", site:"https://mail.naver.com/"},
     all:{label:"전체 메일함", server:null, site:""}
   };
-  var ACC_COLOR = {gmail:"#EA4335", kakao:"#F7C600", naver:"#03C75A"};
+  var ACC_COLOR = {gmail:"#EA4335", all:"#3182F6"};
+
+  // IMAP 계정: 서버 주소로 이름·색·웹메일 주소를 정한다. 모르는 곳은 계정 이름과 기본 색.
+  var IMAP_PRESETS = [
+    [/naver\.com$/, "네이버", "#03C75A", "https://mail.naver.com/"],
+    [/worksmobile\.com$/, "네이버웍스", "#00C73C", "https://mail.worksmobile.com/"],
+    [/kakao\.com$/, "카카오", "#F7C600", "https://mail.kakao.com/"],
+    [/daum\.net$/, "다음", "#FF5A4A", "https://mail.daum.net/"],
+    [/(outlook|office365|hotmail|live)\.com$/, "아웃룩", "#0078D4", "https://outlook.live.com/"],
+    [/nate\.com$/, "네이트", "#F42F2F", "https://mail.nate.com/"],
+    [/hiworks\.com$/, "하이웍스", "#2B6CF6", "https://office.hiworks.com/"],
+    [/gmail\.com$/, "Gmail(IMAP)", "#EA4335", "https://mail.google.com/"],
+    [/(icloud|me)\.com$/, "iCloud", "#5E5CE6", "https://www.icloud.com/mail"],
+    [/yahoo\.com$/, "Yahoo", "#6001D2", "https://mail.yahoo.com/"]
+  ];
+  var IMAP_PALETTE = ["#8B5CF6", "#0EA5E9", "#F97316", "#14B8A6", "#EC4899", "#64748B"];
+  var imapList = [];          // 화면에 보이는 IMAP 계정 이름 (imap 서버의 account name)
+  var imapListFresh = false;  // 이 창에서 목록을 한 번 새로 읽었는지
+  function imapNames(){ return imapList.slice(); }
+  function accColor(a){ return ACC_COLOR[a] || "#64748B"; }
+  function setImapAccounts(list, save){
+    imapList.forEach(function(n){ delete ACC[n]; delete ACC_COLOR[n]; });
+    imapList = [];
+    var used = {};
+    (list || []).forEach(function(a){
+      if (!a || !a.name || a.name === "gmail" || a.name === "all" || imapList.indexOf(a.name) !== -1) return;
+      var host = String(a.host || "").toLowerCase(), p = null;
+      IMAP_PRESETS.forEach(function(x){ if (!p && x[0].test(host)) p = x; });
+      var label = p ? p[1] : a.name;
+      if (used[label]) label += " (" + a.name + ")";   // 같은 곳 계정이 여럿이면 이름으로 구분
+      used[label] = true;
+      ACC[a.name] = {label: label, server: "host:imap", site: p ? p[3] : ""};
+      ACC_COLOR[a.name] = p ? p[2] : IMAP_PALETTE[imapList.length % IMAP_PALETTE.length];
+      imapList.push(a.name);
+    });
+    if (save){ try{ localStorage.setItem("mailImapAccts", JSON.stringify((list || []).map(function(a){ return {name: a.name, host: a.host}; }))); }catch(e){} }
+    renderImapNav();
+  }
+  function renderImapNav(){
+    var nav = document.getElementById("accts"), link = document.getElementById("imapLink");
+    if (!nav) return;
+    Array.prototype.slice.call(nav.querySelectorAll("[data-imap]")).forEach(function(b){ b.parentNode.removeChild(b); });
+    imapList.forEach(function(n){
+      var b = document.createElement("button"); b.type = "button"; b.className = "navbtn";
+      b.setAttribute("data-account", n); b.setAttribute("data-imap", "1"); b.style.setProperty("--c", ACC_COLOR[n]);
+      var ic = document.createElement("span"); ic.className = "ic"; ic.textContent = ACC[n].label.charAt(0).toUpperCase();
+      var lb = document.createElement("span"); lb.className = "lbl"; lb.textContent = ACC[n].label;
+      var nu = document.createElement("span"); nu.className = "num";
+      b.appendChild(ic); b.appendChild(lb); b.appendChild(nu);
+      b.addEventListener("click", function(){ state.account = n; sel = null; persist(); load(false); });
+      nav.insertBefore(b, link);
+    });
+    if (link) link.style.display = imapList.length ? "none" : "";
+  }
+  // 계정 목록을 imap 서버에서 다시 읽는다 (PC 확인 창이 뜰 수 있으므로 IMAP을 쓰는 순간에만 부른다)
+  function refreshImapAccounts(){
+    if (!mcp) return Promise.reject({code: "server_not_connected"});
+    return mcp.callTool("host:imap", "imap_list_accounts", {}, {cache: false}).then(function(r){
+      var p = (r && r.payload) || {};
+      setImapAccounts(p.accounts || [], true);
+      imapListFresh = true;
+      if (state.account !== "all" && !ACC[state.account]){ state.account = "gmail"; persist(); }
+      return imapList;
+    });
+  }
+  function ensureImapAccounts(){
+    if (imapListFresh) return Promise.resolve(imapList);
+    return refreshImapAccounts().catch(function(){ return imapList; });
+  }
+  try{ setImapAccounts(JSON.parse(localStorage.getItem("mailImapAccts") || "null") || [], false); }catch(e){}
 
   try{
     var saved = JSON.parse(localStorage.getItem("mailview") || "null");
@@ -802,7 +870,10 @@ function fmtSize(n){
   }
 
   function fetchAll(range, fresh, sent, q){
-    var accs = ["gmail", "kakao", "naver"];
+    return ensureImapAccounts().then(function(){ return fetchAllNow(range, fresh, sent, q); });
+  }
+  function fetchAllNow(range, fresh, sent, q){
+    var accs = ["gmail"].concat(imapNames());
     return Promise.all(accs.map(function(a){
       var p = state.box === "trash" ? fetchTrash(a, fresh, q) : a === "gmail" ? fetchGmail(range, fresh, sent, q) : fetchImap(a, range, fresh, sent, q);
       return p.then(function(res){ return {acc: a, res: res}; }, function(e){ return {acc: a, err: e || {code: "upstream_error"}}; });
@@ -814,7 +885,7 @@ function fmtSize(n){
         items = items.concat(pt.res.items); more = more || pt.res.more; at = Math.min(at, pt.res.at || at);
         if (!q && !sent && range === "today" && state.box === "inbox") seedKnown(pt.acc, pt.res.items);
       });
-      if (Object.keys(errs).length === accs.length) throw errs.gmail || errs.kakao;
+      if (Object.keys(errs).length === accs.length) throw errs.gmail || errs[Object.keys(errs)[0]];
       return {items: items, at: at, more: more, partErrors: errs};
     });
   }
@@ -1241,7 +1312,7 @@ function fmtSize(n){
   }
 
   function errorText(e, account){
-    var name = ACC[account].label;
+    var name = (ACC[account] || {label: "IMAP"}).label;
     var code = e && e.code;
     if (account !== "gmail"){
       if (code === "server_not_connected" || code === "capability_disabled" || code === "not_granted")
@@ -1654,7 +1725,7 @@ function fmtSize(n){
     if (isNew && !isDraftMode){
       var fr = el("label", "cfield"); fr.appendChild(el("span", null, "보내는 계정"));
       var fromSel = el("select", "sharesel");
-      ["gmail", "kakao", "naver"].forEach(function(a){ var op = el("option", null, ACC[a].label); op.value = a; if (a === acc) op.selected = true; fromSel.appendChild(op); });
+      ["gmail"].concat(imapNames()).forEach(function(a){ var op = el("option", null, ACC[a].label); op.value = a; if (a === acc) op.selected = true; fromSel.appendChild(op); });
       fromSel.addEventListener("change", function(){
         acc = fromSel.value; isG = acc === "gmail"; mailLimit = (isG ? 25 : 10) * MB;
         if (gSig){ gSig.parentNode.hidden = !isG; if (!isG) gSig.checked = false; }
@@ -1881,7 +1952,7 @@ function fmtSize(n){
       if (!ta.value.trim() && !c.files.length && !c.driveLinks.length) return isNew ? "내용을 써 주세요." : "답장 내용을 써 주세요.";
       if (isNew && !g.subject && !forDraft) return "제목을 써 주세요.";
       if (isFwd && !g.to.length) return "받는 사람을 넣어 주세요.";
-      if (isFwd && !isG && c.files.length) return "카카오·네이버 전달에는 새 파일을 붙일 수 없어요. 파일을 빼 주세요.";
+      if (isFwd && !isG && c.files.length) return ACC[acc].label + " 메일 전달에는 새 파일을 붙일 수 없어요. 파일을 빼 주세요.";
       if (isG || isNew || isFwd){
         if (!g.to.length && !forDraft) return "받는 사람을 넣어 주세요.";
         var bad = g.to.concat(g.cc).filter(function(a){ return !validAddr(a); });
@@ -2479,7 +2550,7 @@ function fmtSize(n){
       n1.appendChild(btn("다시 시도", "primary", function(){ load(true); }));
       notice.appendChild(n1);
     }
-    if (state.q && data.items) notice.appendChild(el("div", "note", "최근 1년 안에서 " + (state.account === "all" ? "세 계정 모두" : acc.label + "에서") + " 찾았어요. " + (state.account === "gmail" || state.account === "all" ? "Gmail은 본문까지, " : "") + (state.account !== "gmail" ? "카카오·네이버는 제목과 보낸 사람으로 찾아요." : "")));
+    if (state.q && data.items) notice.appendChild(el("div", "note", "최근 1년 안에서 " + (state.account === "all" ? "모든 계정에서" : acc.label + "에서") + " 찾았어요. " + (state.account === "gmail" || state.account === "all" ? "Gmail은 본문까지, " : "") + (state.account !== "gmail" ? (state.account === "all" ? "다른 메일은" : acc.label + "은(는)") + " 제목과 보낸 사람으로 찾아요." : "")));
     if (data.partErrors) Object.keys(data.partErrors).forEach(function(a){
       var ne2 = el("div", "note err"); ne2.appendChild(el("span", null, ACC[a].label + ": " + errorText(data.partErrors[a], a)));
       ne2.appendChild(btn("다시 시도", "", function(){ load(true); })); notice.appendChild(ne2);
@@ -2541,7 +2612,7 @@ function fmtSize(n){
         mm.appendChild(el("span", "msubj", x.subject));
         if (x.snippet) mm.appendChild(el("span", "msnip", x.snippet));
         var tags = el("div", "tags");
-        if (state.account === "all"){ var ak = x.acc || "gmail", at2 = el("span", "tag acct", ACC[ak].label); at2.style.setProperty("--c", ACC_COLOR[ak]); tags.appendChild(at2); }
+        if (state.account === "all"){ var ak = x.acc || "gmail", at2 = el("span", "tag acct", ACC[ak].label); at2.style.setProperty("--c", accColor(ak)); tags.appendChild(at2); }
         if (!isSent && state.cat === "all"){ var c = catOf(x.cat), ct = el("span", "tag cat", c.label); ct.style.setProperty("--c", c.color); tags.appendChild(ct); }
         x.chips.forEach(function(nm){ tags.appendChild(el("span", "tag" + (x.work ? " work" : ""), nm)); });
         if (x.marking) tags.appendChild(el("span", "tag wait", "읽음 처리 중"));
@@ -2572,18 +2643,34 @@ function fmtSize(n){
 
     var foot = $("foot"); foot.textContent = "";
     if (state.account === "all"){
-      foot.textContent = "Gmail·카카오·네이버 메일을 한곳에 모아 보여 줘요. 카카오·네이버는 PC에서 Claude 앱이 켜져 있을 때만 불러와요.";
+      foot.textContent = "Gmail" + imapNames().map(function(n){ return "·" + ACC[n].label; }).join("") + " 메일을 한곳에 모아 보여 줘요." + (imapList.length ? " Gmail이 아닌 메일은 PC에서 Claude 앱이 켜져 있을 때만 불러와요." : " 왼쪽 '다른 메일 연결'로 네이버·카카오·다음·아웃룩 같은 메일을 더할 수 있어요.");
     } else if (state.account === "gmail"){
       foot.textContent = "메일을 열면 Gmail에서도 읽음으로 바뀌어요. 삭제한 메일은 Gmail 휴지통으로 가요. 보낸 메일과 스팸함은 빠져 있어요.";
     } else {
-      foot.appendChild(document.createTextNode(acc.label + " 메일은 PC에서 Claude 앱이 켜져 있을 때만 불러와요. 열면 " + acc.label + "에서도 읽음으로 바뀌어요. 원문 화면: "));
-      var a = el("a", null, acc.site.replace("https://", "").replace(/\/$/, "")); a.href = acc.site; a.target = "_blank"; a.rel = "noopener noreferrer";
-      foot.appendChild(a);
+      foot.appendChild(document.createTextNode(acc.label + " 메일은 PC에서 Claude 앱이 켜져 있을 때만 불러와요. 열면 " + acc.label + "에서도 읽음으로 바뀌어요." + (acc.site ? " 원문 화면: " : "")));
+      if (acc.site){
+        var a = el("a", null, acc.site.replace("https://", "").replace(/\/$/, "")); a.href = acc.site; a.target = "_blank"; a.rel = "noopener noreferrer";
+        foot.appendChild(a);
+      }
     }
   }
 
   document.querySelectorAll("[data-account]").forEach(function(b){
+    if (b.hasAttribute("data-imap")) return;   // IMAP 계정 버튼은 renderImapNav가 따로 연결
     b.addEventListener("click", function(){ state.account = b.dataset.account; sel = null; persist(); load(false); });
+  });
+  $("imapLink").addEventListener("click", function(){
+    var lb = $("imapLink").querySelector(".lbl");
+    lb.textContent = "계정 확인 중…";
+    refreshImapAccounts().then(function(list){
+      lb.textContent = "다른 메일 연결";
+      if (list.length){ state.account = list[0]; sel = null; persist(); load(false); return; }
+      lb.textContent = "다른 메일 연결";
+      askConfirm("등록된 IMAP 계정이 없어요. PowerShell에서 아래 명령을 실행하면 계정 등록 화면이 열려요. 메일 설정에서 IMAP 사용을 켜고 앱 비밀번호를 넣은 뒤, 이 버튼을 다시 눌러 주세요.  npx -y -p imap-mcp-server@2.2.0 imap-setup", "확인");
+    }).catch(function(e){
+      lb.textContent = "다른 메일 연결";
+      askConfirm("IMAP 메일을 불러오지 못했어요. " + errorText(e || {code: "server_not_connected"}, "imap") + " Claude 앱 설정에 imap 서버가 있는지 확인해 주세요. (README의 설치 방법 참고)", "확인");
+    });
   });
 
 
@@ -3010,7 +3097,7 @@ function fmtSize(n){
     var items = list.length > 3 ? [null] : list;
     items.forEach(function(x){
       var t = el("div", "toast"); t.setAttribute("role", "status"); t.tabIndex = 0;
-      var ic = el("span", "tic", ACC[acc].label.charAt(0)); ic.style.setProperty("--c", acc === "gmail" ? "#EA4335" : acc === "kakao" ? "#F7C600" : "#03C75A");
+      var ic = el("span", "tic", ACC[acc].label.charAt(0)); ic.style.setProperty("--c", accColor(acc));
       t.appendChild(x ? avatar(x.from) : ic);
       var b = el("div", "tbody");
       b.appendChild(el("span", "tk", "새 메일 · " + ACC[acc].label));
@@ -3037,7 +3124,7 @@ function fmtSize(n){
     });
   }
   setInterval(function(){ poll("gmail"); }, 2 * 60 * 1000);
-  setInterval(function(){ ["kakao", "naver"].forEach(function(a){ if (imapOk[a]) poll(a); }); }, 5 * 60 * 1000);
+  setInterval(function(){ imapNames().forEach(function(a){ if (imapOk[a]) poll(a); }); }, 5 * 60 * 1000);
 
   document.querySelectorAll("[data-box]").forEach(function(b){
     b.addEventListener("click", function(){ state.box = b.dataset.box; sel = null; persist(); load(false); });
