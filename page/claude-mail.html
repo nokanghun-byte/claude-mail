@@ -705,7 +705,7 @@ function fmtSize(n){
       b.addEventListener("click", function(){ state.account = n; sel = null; persist(); load(false); });
       nav.insertBefore(b, link);
     });
-    if (link) link.style.display = imapList.length ? "none" : "";
+    if (link){ nav.appendChild(link); link.querySelector(".lbl").textContent = imapList.length ? "메일 계정 추가" : "다른 메일 연결"; }   // 항상 맨 아래에 보인다
   }
   // 계정 목록을 imap 서버에서 다시 읽는다 (PC 확인 창이 뜰 수 있으므로 IMAP을 쓰는 순간에만 부른다)
   function refreshImapAccounts(){
@@ -2690,15 +2690,18 @@ function fmtSize(n){
   });
   $("imapLink").addEventListener("click", function(){
     var lb = $("imapLink").querySelector(".lbl");
+    var before = imapNames(), restore = function(){ lb.textContent = imapList.length ? "메일 계정 추가" : "다른 메일 연결"; };
     lb.textContent = "계정 확인 중…";
     refreshImapAccounts().then(function(list){
-      lb.textContent = "다른 메일 연결";
-      if (list.length){ state.account = list[0]; sel = null; persist(); load(false); return; }
-      lb.textContent = "다른 메일 연결";
-      askConfirm("등록된 IMAP 계정이 없어요. PowerShell에서 아래 명령을 실행하면 계정 등록 화면이 열려요. 메일 설정에서 IMAP 사용을 켜고 앱 비밀번호를 넣은 뒤, 이 버튼을 다시 눌러 주세요.  npx -y -p imap-mcp-server@2.2.0 imap-setup", "확인");
+      restore();
+      var added = list.filter(function(n){ return before.indexOf(n) === -1; });
+      if (added.length){ state.account = added[0]; sel = null; persist(); load(false); return; }   // 새로 추가된 계정을 바로 연다
+      askConfirm((list.length ? "새로 추가된 계정이 없어요. " : "등록된 메일 계정이 없어요. ") +
+        "Claude 채팅에서 \"네이버 메일 계정 추가해줘\"처럼 말하면 등록할 수 있어요(네이버·카카오·다음·아웃룩·회사 메일 등 IMAP 메일 모두). " +
+        "메일 설정에서 IMAP/SMTP 사용을 켜고 앱 비밀번호를 만들어 두세요. 등록한 뒤 이 버튼을 다시 누르면 왼쪽 메뉴에 나타나요.", "확인");
     }).catch(function(e){
-      lb.textContent = "다른 메일 연결";
-      askConfirm("IMAP 메일을 불러오지 못했어요. " + errorText(e || {code: "server_not_connected"}, "imap") + " Claude 앱 설정에 imap 서버가 있는지 확인해 주세요. (README의 설치 방법 참고)", "확인");
+      restore();
+      askConfirm("IMAP 메일을 불러오지 못했어요. " + errorText(e || {code: "server_not_connected"}, "imap") + " Claude 앱 설정 → 확장 프로그램에서 'Claude Mail'이 설치되어 켜져 있는지 확인해 주세요.", "확인");
     });
   });
 
