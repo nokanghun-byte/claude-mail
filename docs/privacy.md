@@ -26,3 +26,34 @@ Claude 메일과 이 프로젝트의 Google OAuth 앱(mail-rclone)은 **어떤 �
 ## 문의
 
 이 저장소의 Issues로 문의해 주세요.
+
+---
+
+# Privacy Policy (Claude Mail / mail-rclone)
+
+Last updated: 2026-11-18
+
+## Data we collect
+
+Claude Mail and its Google OAuth app (mail-rclone) **do not send or store any personal data on a developer server.** There is no developer-operated server.
+
+## Use of Google user data
+
+- Scope requested: `https://www.googleapis.com/auth/drive.file`
+- Purpose: only to upload large attachments the user chooses to **the user's own Google Drive** and create a share link to put in the email.
+- This scope only allows access to files created by this app; no other Drive files are read.
+- The OAuth token is stored only in the rclone config file on the user's PC and is never transmitted elsewhere.
+- Google user data is never sold, shared with third parties, or used for advertising.
+- Use of Google APIs complies with the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
+
+## Mail data
+
+Mail content is shown only on the user's screen, via the connectors linked to the user's Claude account (Gmail) and the IMAP server program on the user's PC.
+
+## Revoking access
+
+You can revoke access at any time in [Google Account → Security → Third-party apps & services](https://myaccount.google.com/connections).
+
+## Contact
+
+Please open an Issue in this repository.
