@@ -10,7 +10,7 @@ import { appendFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-const VERSION = "1.2.2";
+const VERSION = "1.3.0";
 const require = createRequire(import.meta.url);
 const DEBUG_FILE = join(tmpdir(), "claude-mail-debug.log");
 function log(...a){
@@ -25,7 +25,7 @@ process.env.IMAP_MCP_ENABLED_TOOLS = [
   "imap_search_emails", "imap_get_latest_emails", "imap_get_email", "imap_find_email_by_message_id",
   "imap_find_thread_messages", "imap_download_attachment", "imap_mark_as_read", "imap_mark_as_unread",
   "imap_delete_email", "imap_reply_to_email", "imap_send_email", "imap_flag_email", "imap_unflag_email",
-  "imap_forward_email", "imap_move_email"
+  "imap_forward_email", "imap_move_email", "imap_save_draft"
 ].join(",");
 
 // 앱이 읽기만 하는 도구는 묻지 않고, 지우거나 보내는 도구만 확인하도록 도구마다 성격을 붙인다

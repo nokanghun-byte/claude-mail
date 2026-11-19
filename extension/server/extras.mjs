@@ -29,6 +29,11 @@ export const TOOLS = [{
   description: "Return the Claude Mail page HTML and the capabilities JSON it needs, so Claude can publish it as an artifact for the user.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+}, {
+  name: "imap_discard_draft",
+  description: "Permanently remove one saved draft from an IMAP account's Drafts folder (used after a draft is re-saved or sent from the mail page). Only works inside the Drafts folder.",
+  inputSchema: { type: "object", properties: { accountName: { type: "string" }, uid: { type: "number" } }, required: ["accountName", "uid"], additionalProperties: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
 }];
 
 export const PROMPTS = [{
@@ -118,6 +123,26 @@ async function convertDocument(args){
   return fail("지원하지 않는 형식이에요: " + ext + " (docx, xlsx, xls, csv, pptx)");
 }
 
+// ---------- 임시보관 지우기 ----------
+// 다시 저장하거나 보낸 뒤 예전 임시보관본을 지운다. 휴지통으로 보내지 않고 임시보관함 안에서만, 초안 표시가 있는 메일만 지운다.
+async function discardDraft(args){
+  const uid = Number(args.uid);
+  if (!args.accountName || !Number.isInteger(uid) || uid <= 0) return fail("accountName과 uid가 필요해요");
+  const core = await import("./imap-core.mjs");
+  const id = core.accountManager.resolveAccountId(undefined, args.accountName);
+  const folder = await core.imapService.findDraftsFolder(id);
+  if (!folder) return fail("임시보관함을 찾지 못했어요");
+  const client = await core.imapService.ensureConnected(id);
+  const lock = await client.getMailboxLock(folder);
+  try {
+    const msg = await client.fetchOne(String(uid), { flags: true }, { uid: true });
+    if (!msg) return text({ ok: true, gone: true });
+    // 카카오처럼 저장할 때 초안 표시(\Draft)를 지우는 서버가 있어, 표시 대신 '임시보관함 안의 메일'인지로만 제한한다
+    await client.messageDelete(String(uid), { uid: true });
+    return text({ ok: true, folder });
+  } finally { lock.release(); }
+}
+
 // ---------- 페이지 ----------
 function getMailPage(){
   const html = readFileSync(join(here, "..", "page", "claude-mail.html"), "utf8");
@@ -130,6 +155,7 @@ export async function call(name, args){
     if (name === "open_account_setup") return await openAccountSetup();
     if (name === "convert_document") return await convertDocument(args || {});
     if (name === "get_mail_page") return getMailPage();
+    if (name === "imap_discard_draft") return await discardDraft(args || {});
   } catch (e){ return fail(String(e && e.message || e)); }
   return null;
 }

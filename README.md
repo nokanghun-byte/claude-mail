@@ -22,7 +22,8 @@ Claude 아티팩트(페이지)와 내 PC에서 돌아가는 작은 도우미 서
 
 ### 할 수 있는 것
 
-- 통합 받은편지함, 계정별 메일함, 보낸편지함, 임시보관함, 휴지통
+- 통합 받은편지함, 계정별 메일함, 보낸편지함, 휴지통
+- 임시보관함: Gmail·IMAP 계정 모두 저장하고, 페이지 안의 쓰기 창에서 바로 이어 쓰기
 - 원본 모양 그대로 본문 보기, 외부 이미지 표시
 - 첨부파일 미리보기: PDF, 이미지, 한글(hwpx), 워드·엑셀·파워포인트, zip
 - 답장 / 전체답장 / 전달 / 새 메일, 끌어다 놓기 첨부, Gmail 주소록, 명함 서명
@@ -101,7 +102,8 @@ It consists of a Claude artifact (the page) and a small helper server running on
 
 ### Features
 
-- Unified inbox, per-account inbox, Sent, Drafts, Trash
+- Unified inbox, per-account inbox, Sent, Trash
+- Drafts for Gmail and every IMAP account, reopened and finished right in the page's compose window
 - Original HTML rendering, remote images
 - Attachment preview: PDF, images, Hangul (hwpx), Word/Excel/PowerPoint, zip
 - Reply / Reply all / Forward / New mail, drag-and-drop attachments, Gmail contacts, business-card signature

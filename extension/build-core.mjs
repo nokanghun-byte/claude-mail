@@ -25,6 +25,9 @@ s = s.replace(sentList, '      "Sent Messages",\n      "보낸메일함",\n     
 const listFn = "  getAllAccounts() {\n    return Array.from(this.accounts";
 if (!s.includes(listFn)) throw new Error("getAllAccounts를 찾지 못했습니다");
 s = s.replace(listFn, "  getAllAccounts() {\n    this.loadAccountsSync();\n    return Array.from(this.accounts");
+// 확장 프로그램의 임시보관 정리 도구(extras.mjs)가 쓰도록 내부 객체도 내보낸다
+if (!s.includes("\nexport { server };")) throw new Error("imap-core export 구조가 바뀌었어요");
+s = s.replace("\nexport { server };", "\nexport { server, imapService, accountManager };");
 writeFileSync(join(here, "server", "imap-core.mjs"), s);
 
 // 2) setup-core (명령줄 처리 부분을 빼고 WebUIServer만 내보낸다)

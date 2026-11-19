@@ -483,6 +483,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .reader{padding:28px 36px 64px;gap:16px;max-width:880px}
 .rsubj{font-size:25px;line-height:1.38;letter-spacing:-0.03em;text-wrap:balance;margin-top:2px}
 .rmeta{gap:12px}
+.trashnote{display:flex;flex-direction:column;gap:12px}
+.trashnote .body{padding:0;color:var(--muted)}
 .rtags{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;align-self:center}
 @media (min-width:1101px){.rtop{display:none}}
 .rmeta .av{width:40px;height:40px}
@@ -553,7 +555,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <nav class="nav" id="boxes" aria-label="메일함">
       <button type="button" class="navbtn" data-box="inbox" style="--c:var(--accent)"><span class="dot"></span><span class="lbl">받은메일함</span></button>
       <button type="button" class="navbtn" data-box="sent" style="--c:var(--faint)"><span class="dot"></span><span class="lbl">보낸메일함</span></button>
-      <button type="button" class="navbtn" data-box="drafts" style="--c:var(--ad)"><span class="dot"></span><span class="lbl">임시보관함 (Gmail)</span></button>
+      <button type="button" class="navbtn" data-box="drafts" style="--c:var(--ad)"><span class="dot"></span><span class="lbl">임시보관함</span></button>
       <button type="button" class="navbtn" data-box="trash" style="--c:var(--danger)"><span class="dot"></span><span class="lbl">휴지통</span></button>
     </nav>
     <div class="side-h" id="catsHead">분류</div>
@@ -1019,7 +1021,49 @@ function fmtSize(n){
     });
   }
 
+  // 임시보관함: Gmail은 Gmail 연결로, IMAP 계정은 각 계정의 임시보관함 폴더에서 읽는다. 전체 메일함이면 모두 합친다.
   function fetchDrafts(fresh, q){
+    var a = state.account;
+    if (a === "gmail") return fetchGmailDrafts(fresh, q);
+    if (a !== "all") return fetchImapDrafts(a, fresh, q);
+    return ensureImapAccounts().then(function(){
+      var accs = ["gmail"].concat(imapNames());
+      return Promise.all(accs.map(function(x){
+        return (x === "gmail" ? fetchGmailDrafts(fresh, q) : fetchImapDrafts(x, fresh, q)).catch(function(e){ return {err: e || {code: "upstream_error"}, acc: x}; });
+      }));
+    }).then(function(parts){
+      var items = [], errs = {}, at = Date.now(), more = false;
+      parts.forEach(function(p){ if (p.err){ errs[p.acc] = p.err; return; } items = items.concat(p.items); at = Math.min(at, p.at || at); more = more || p.more; });
+      if (parts.length && parts.every(function(p){ return p.err; })) throw parts[0].err;
+      return {items: items, at: at, more: more, partErrors: errs};
+    });
+  }
+  function addrText(a){ return typeof a === "string" ? a : a ? (a.name && a.address ? a.name + " <" + a.address + ">" : (a.address || a.email || a.text || "")) : ""; }
+  function addrList(v){ return (Array.isArray(v) ? v : v ? [v] : []).map(addrText).filter(Boolean); }
+  function draftsFolderOf(acc){
+    return imapFolders(acc).then(function(fds){
+      var f = fds.filter(function(fd){ return /drafts/i.test(fd.use || ""); })[0] || fds.filter(function(fd){ return /^(Drafts|Draft|임시보관함|임시 보관함)$/i.test(fd.name); })[0];
+      return f ? f.name : null;
+    });
+  }
+  function fetchImapDrafts(acc, fresh, q){
+    return draftsFolderOf(acc).then(function(folder){
+      if (!folder) return {items: [], at: Date.now(), more: false};
+      var since = ymd(addDays(startOfDay(new Date()), -365), "-");
+      return readTool(HOST.imap, "imap_search_emails", {accountName: acc, folder: folder, since: since, limit: 100}, fresh).then(function(r){
+        var p = r.payload || {}, ms = p.messages || [], items = [], ql = String(q || "").toLowerCase();
+        ms.forEach(function(m){
+          var tos = addrList(m.to), subj = m.subject || "(제목 없음)";
+          if (ql && (subj + " " + tos.join(" ")).toLowerCase().indexOf(ql) === -1) return;
+          items.push({id: acc + ":d:" + m.uid, isDraft: true, acc: acc, uid: m.uid, folder: folder,
+            dateMs: Date.parse(m.date) || Date.now(), from: tos.length ? tos.join(", ") : "(받는 사람 없음)", to: tos, cc: [],
+            subject: subj, body: null, snippet: "", unread: false, chips: [], work: false, count: 1, cat: "act", url: "", fromAddr: ""});
+        });
+        return {items: items, at: (r.cache && r.cache.storedAt) || Date.now(), more: (p.totalFound || 0) > ms.length};
+      });
+    });
+  }
+  function fetchGmailDrafts(fresh, q){
     var input = {pageSize: 50, view: "DRAFT_VIEW_FULL"};
     if (q) input.query = q;
     return readTool("Gmail", "list_drafts", input, fresh).then(function(r){
@@ -1912,7 +1956,7 @@ function fmtSize(n){
 
   function buildComposer(x, o, mode, draft){
     var isNew = mode === "new" || mode === "draft", isFwd = mode === "fwd", isDraftMode = mode === "draft";
-    var acc = isDraftMode ? "gmail" : isNew ? (state.account === "all" ? "gmail" : state.account) : (x.acc || "gmail"), isG = acc === "gmail";
+    var acc = isDraftMode ? ((draft && draft.acc) || "gmail") : isNew ? (state.account === "all" ? "gmail" : state.account) : (x.acc || "gmail"), isG = acc === "gmail";
     var last = isNew ? {} : (o.msgs[o.msgs.length - 1] || {});
     var c = {busy: false, files: [], confirming: false, driveLinks: []};
     canSendFiles().then(function(ok){ c.noFileArgs = !ok; });
@@ -1940,6 +1984,9 @@ function fmtSize(n){
         drawFiles(); drawFoot();
       });
       fr.appendChild(fromSel); box.appendChild(fr);
+    }
+    if (isDraftMode){
+      var fr0 = el("div", "cfield ro"); fr0.appendChild(el("span", null, "보내는 계정")); fr0.appendChild(el("b", null, ACC[acc] ? ACC[acc].label : acc)); box.appendChild(fr0);
     }
     var defTo = (isNew || isFwd) ? "" : isG ? (last.addr || "") : (x.fromAddr || "");
     var toIn = null, ccIn = null, subjIn = null;
@@ -2343,7 +2390,7 @@ function fmtSize(n){
         foot.appendChild(cf);
         return;
       }
-      if (isG && !isFwd && !blockedTools.create_draft) foot.appendChild(btn("임시보관함에 저장", "", doDraft));
+      if (!isFwd && ((isG && !blockedTools.create_draft) || (!isG && isNew))) foot.appendChild(btn("임시보관함에 저장", "", doDraft));
       foot.appendChild(btn("보내기", "primary", function(){
         var err = check(gather(), false);
         if (err){ setStatus(err, "bad"); return; }
@@ -2414,9 +2461,7 @@ function fmtSize(n){
         var inp = {accountName: x.acc, folder: x.folder, uid: x.uid, text: g.text, html: w.html, replyAll: mode === "all"};
         if (w.atts.length) inp.attachments = w.atts;
         return mcp.callTool(HOST.imap, "imap_reply_to_email", inp, {cache: false});
-      }).then(function(){
-        if (isDraftMode && draft) return mcp.callTool("Gmail", "delete_draft", {draftId: draft.draftId}, {cache: false}).catch(function(){});
-      }).then(function(){ if (isDraftMode) dropDrafts(); after(isNew ? "✓ 메일을 보냈어요. 보낸메일함에 있어요." : isFwd ? "✓ 전달했어요." : "✓ 답장을 보냈어요. 보낸메일함에 있어요."); }, function(e){ failed(e, "보내지"); });
+      }).then(dropOldDraft).then(function(){ if (isDraftMode) dropDrafts(); after(isNew ? "✓ 메일을 보냈어요. 보낸메일함에 있어요." : isFwd ? "✓ 전달했어요." : "✓ 답장을 보냈어요. 보낸메일함에 있어요."); }, function(e){ failed(e, "보내지"); });
     }
     function doDraft(){
       if (c.busy || !mcp) return;
@@ -2425,15 +2470,25 @@ function fmtSize(n){
       lock(true); foot.textContent = ""; setStatus("임시보관함에 저장하는 중…");
       driveUpload(g).then(function(g2){ g = g2; setStatus("임시보관함에 저장하는 중…"); return attachPayload(); }).then(function(atts){
         var w = withCard(g, atts);
+        if (!isG){
+          var di = {accountName: acc, subject: g.subject, text: g.text, html: w.html};
+          if (g.to.length) di.to = g.to;
+          if (g.cc.length) di.cc = g.cc;
+          if (w.atts.length) di.attachments = w.atts;
+          return mcp.callTool(HOST.imap, "imap_save_draft", di, {cache: false});
+        }
         var input = {subject: g.subject, body: g.text, htmlBody: w.html, includeSignature: !!(gSig && gSig.checked)};
         if (!isNew && !isFwd) input.replyToMessageId = last.id;
         if (g.to.length) input.to = g.to;
         if (g.cc.length) input.cc = g.cc;
         if (w.atts.length) input.attachments = w.atts;
         return mcp.callTool("Gmail", "create_draft", input, {cache: false});
-      }).then(function(){
-        if (isDraftMode && draft) return mcp.callTool("Gmail", "delete_draft", {draftId: draft.draftId}, {cache: false}).catch(function(){});
-      }).then(function(){ dropDrafts(); after("✓ Gmail 임시보관함에 저장했어요"); }, function(e){ failed(e, "저장하지"); });
+      }).then(dropOldDraft).then(function(){ dropDrafts(); after("✓ " + (isG ? "Gmail" : ACC[acc].label) + " 임시보관함에 저장했어요"); }, function(e){ failed(e, "저장하지"); });
+    }
+    function dropOldDraft(){
+      if (!(isDraftMode && draft)) return;
+      if (draft.acc) return mcp.callTool(HOST.imap, "imap_discard_draft", {accountName: draft.acc, uid: draft.uid}, {cache: false}).catch(function(){});
+      return mcp.callTool("Gmail", "delete_draft", {draftId: draft.draftId}, {cache: false}).catch(function(){});
     }
     drawFoot();
     setTimeout(function(){ try{ ta.focus(); }catch(e){} }, 30);
@@ -2607,6 +2662,24 @@ function fmtSize(n){
     }
 
     if (o.loading){ wrap.appendChild(el("div", "skel")); wrap.appendChild(el("div", "skel")); return wrap; }
+    if (o.error && !x.acc && x.inTrash && /permission/i.test(String(o.error.message || "") + " " + String(o.error.code || ""))){
+      // Claude의 Gmail 연결은 휴지통에 있는 메일의 본문을 열어 주지 않는다. 미리보기와 꺼내서 보기를 준다.
+      var tb = el("div", "card pad trashnote");
+      if (x.snippet) tb.appendChild(el("p", "body", x.snippet + " …"));
+      tb.appendChild(el("p", "cnote", "Gmail 휴지통에 있는 메일은 Claude의 Gmail 연결로 본문을 열 수 없어요. 받은메일함으로 꺼내면 바로 볼 수 있어요."));
+      var tbr = el("div", "tools");
+      tbr.appendChild(btn("꺼내서 보기", "primary", function(){
+        act(x, "꺼내기", mcp.callTool("Gmail", "untrash_thread", {threadId: x.id}, {cache: false}), function(){
+          x.inTrash = false; removeFromList(x);
+          Object.keys(store).forEach(function(k){ if (k.indexOf("|inbox|") !== -1) delete store[k]; });
+          delete open[x.id]; select(x);
+        });
+      }));
+      if (x.url){ var tg2 = el("a", "btn", "Gmail에서 열기"); tg2.href = x.url; tg2.target = "_blank"; tg2.rel = "noopener noreferrer"; tbr.appendChild(tg2); }
+      tb.appendChild(tbr);
+      wrap.appendChild(tb);
+      return wrap;
+    }
     if (o.error){
       var ne = el("div", "note err");
       ne.appendChild(el("span", null, errorText(o.error, x.acc || "gmail")));
@@ -2724,7 +2797,7 @@ function fmtSize(n){
     var isSent = state.box === "sent" || state.box === "drafts" || state.box === "trash";
     var isTrash = state.box === "trash";
     var isDrafts = state.box === "drafts";
-    var boxName = isTrash ? (state.account === "all" ? "전체 휴지통" : acc.label + " 휴지통") : isDrafts ? "Gmail 임시보관함" : state.account === "all" ? (isSent ? "전체 보낸메일함" : "전체 메일함") : isSent ? acc.label + " 보낸메일함" : acc.label;
+    var boxName = isTrash ? (state.account === "all" ? "전체 휴지통" : acc.label + " 휴지통") : isDrafts ? (state.account === "all" ? "전체 임시보관함" : acc.label + " 임시보관함") : state.account === "all" ? (isSent ? "전체 보낸메일함" : "전체 메일함") : isSent ? acc.label + " 보낸메일함" : acc.label;
     $("ltitle").textContent = state.q ? "‘" + state.q + "’ 검색 결과" : (isSent || state.cat === "all") ? boxName : catOf(state.cat).label;
     document.querySelector(".seg[aria-label='기간']").hidden = !!state.q || isTrash;
     $("qClear").hidden = !state.q;
@@ -3257,7 +3330,20 @@ function fmtSize(n){
   }
 
   function openForward(x, o){ if (composerOpen) return; composerOpen = true; x.replyMsg = ""; buildComposer(x, o, "fwd"); }
-  function openDraft(d){ if (composerOpen) return; composerOpen = true; buildComposer(null, null, "draft", d); }
+  function openDraft(d){
+    if (composerOpen) return;
+    composerOpen = true;
+    if (!d.acc || d.body != null){ buildComposer(null, null, "draft", d); return; }
+    // IMAP 임시보관 메일은 본문을 먼저 읽어 온다
+    flash("임시보관 메일을 불러오는 중…");
+    readTool(HOST.imap, "imap_get_email", {accountName: d.acc, folder: d.folder, uid: d.uid, bodyFormat: "text", maxContentLength: 200000, includeAttachmentText: false}).then(function(r){
+      var e = (r.payload && r.payload.email) || {};
+      d.body = String(e.textContent || e.markdownContent || "").replace(/\s+$/, "");
+      if (addrList(e.to).length) d.to = addrList(e.to);
+      d.cc = addrList(e.cc);
+      buildComposer(null, null, "draft", d);
+    }).catch(function(e){ composerOpen = false; flash("임시보관 메일을 열지 못했어요. " + errorText(e, d.acc)); });
+  }
 
   // ---- 단축키 ----
   function visibleRows(){ return Array.prototype.slice.call(document.querySelectorAll("#list .mrow")); }
