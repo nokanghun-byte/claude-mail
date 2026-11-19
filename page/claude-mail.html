@@ -3121,33 +3121,45 @@ function fmtSize(n){
   });
 
   // ---- 새 메일 알림 ----
-  // Gmail은 2분마다, 카카오·네이버는 이 창에서 한 번이라도 불러온 계정만 5분마다 오늘 받은메일함을 다시 읽는다.
-  // (카카오·네이버를 처음부터 자동으로 읽으면 PC 확인 창이 갑자기 뜰 수 있어서)
-  var known = {};     // 계정 -> {메일 id: true}
-  var imapOk = {};    // 이 창에서 불러온 적 있는 카카오·네이버
-  function seedKnown(acc, items){ var k = known[acc] || (known[acc] = {}); items.forEach(function(x){ k[x.id] = true; }); }
+  // Gmail은 2분마다, IMAP 계정은 5분마다 오늘 받은메일함을 다시 읽는다.
+  // 창이 뒤에 가려져 있어도 확인하고, 알림은 창을 다시 볼 때까지 남겨 둔다.
+  // Gmail은 대화(스레드) 단위라서 같은 대화에 새 답장이 와도 알 수 있게 "id + 마지막 메일 시각"으로 기억한다.
+  var known = {};     // 계정 -> {"id|시각": true}
+  var imapOk = {};    // 불러오기에 성공한 IMAP 계정 (실패한 계정은 다음 차례에 다시 시도)
+  function seenKey(x){ return x.id + "|" + (x.dateMs || 0); }
+  function seedKnown(acc, items){ var k = known[acc] || (known[acc] = {}); items.forEach(function(x){ k[seenKey(x)] = true; }); }
+  function mergeFresh(list, fresh){
+    var ids = {}; fresh.forEach(function(x){ ids[x.id] = true; });
+    list = fresh.concat(list.filter(function(x){ return !ids[x.id]; }));
+    list.sort(function(a, b){ return b.dateMs - a.dateMs; });
+    return list;
+  }
+  var polling = {};
   function poll(acc){
-    if (!mcp || document.hidden) return;
+    if (!mcp || polling[acc]) return;
     var key = acc + "|inbox|today";
     if (store[key] && store[key].loading) return;
+    polling[acc] = true;
     var p = acc === "gmail" ? fetchGmail("today", true, false) : fetchImap(acc, "today", true, false);
     p.then(function(res){
+      if (acc !== "gmail") imapOk[acc] = true;
       var first = !known[acc];
-      var fresh = first ? [] : res.items.filter(function(x){ return !known[acc][x.id] && x.unread; });
+      var fresh = first ? [] : res.items.filter(function(x){ return !known[acc][seenKey(x)] && x.unread; });
       seedKnown(acc, res.items);
       var d = store[key];
       if (d && d.items){
-        if (fresh.length){ d.items = fresh.concat(d.items); d.items.sort(function(a, b){ return b.dateMs - a.dateMs; }); }
+        if (fresh.length) d.items = mergeFresh(d.items, fresh);
         d.at = res.at;
       } else if (!d){
         res.items.sort(function(a, b){ return b.dateMs - a.dateMs; });
         store[key] = res;
       }
       var dall = store["all|inbox|today"];
-      if (fresh.length && dall && dall.items){ dall.items = fresh.concat(dall.items); dall.items.sort(function(a, b){ return b.dateMs - a.dateMs; }); }
+      if (fresh.length && dall && dall.items) dall.items = mergeFresh(dall.items, fresh);
       if (fresh.length){ fresh.sort(function(a, b){ return b.dateMs - a.dateMs; }); showToasts(acc, fresh); }
       render();
-    }).catch(function(){ /* 알림 확인 실패는 조용히 넘긴다. 다음 차례에 다시 확인한다 */ });
+    }).catch(function(){ /* 알림 확인 실패는 조용히 넘긴다. 다음 차례에 다시 확인한다 */ })
+      .then(function(){ polling[acc] = false; });
   }
   function toastHost(){
     var h = $("toasts");
@@ -3183,15 +3195,23 @@ function fmtSize(n){
       function go(){ gone(); openFromToast(acc, x); }
       t.addEventListener("click", go);
       t.addEventListener("keydown", function(e){ if (e.key === "Enter") go(); });
-      var timer = setTimeout(gone, 10000);
+      // 창이 가려져 있을 때 온 알림은 다시 볼 때부터 시간을 잰다
+      var timer = null;
+      function arm(ms){ clearTimeout(timer); timer = document.hidden ? null : setTimeout(gone, ms); }
+      t._arm = arm;
+      arm(12000);
       t.addEventListener("mouseenter", function(){ clearTimeout(timer); });
-      t.addEventListener("mouseleave", function(){ timer = setTimeout(gone, 4000); });
+      t.addEventListener("mouseleave", function(){ arm(4000); });
       host.appendChild(t);
       while (host.children.length > 4) host.firstChild.remove();
     });
   }
   setInterval(function(){ poll("gmail"); }, 2 * 60 * 1000);
-  setInterval(function(){ imapNames().forEach(function(a){ if (imapOk[a]) poll(a); }); }, 5 * 60 * 1000);
+  setInterval(function(){ imapNames().forEach(function(a){ poll(a); }); }, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) return;
+    document.querySelectorAll(".toast").forEach(function(t){ if (t._arm) t._arm(12000); });
+  });
 
   document.querySelectorAll("[data-box]").forEach(function(b){
     b.addEventListener("click", function(){ state.box = b.dataset.box; sel = null; persist(); load(false); });
@@ -3234,7 +3254,11 @@ function fmtSize(n){
     // 카카오·네이버가 마지막 선택이었어도 첫 화면은 Gmail로 연다. PC 확인 창이 페이지를 열자마자 뜨지 않게 하려는 것.
     if (state.account !== "gmail"){ state.account = "gmail"; }
     load(false);
-    if (mcp) setTimeout(function(){ if (!known.gmail) poll("gmail"); }, 4000);
+    if (mcp){
+      setTimeout(function(){ if (!known.gmail) poll("gmail"); }, 4000);
+      // IMAP 계정도 처음에 한 번 읽어 두어야 그다음부터 새 메일을 알아챈다
+      setTimeout(function(){ ensureImapAccounts().then(function(){ imapNames().forEach(function(a){ if (!known[a]) poll(a); }); }).catch(function(){}); }, 8000);
+    }
   });
 })();
 </script>
