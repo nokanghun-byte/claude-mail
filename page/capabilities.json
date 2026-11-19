@@ -19,7 +19,12 @@
                     "send_message",
                     "list_drafts",
                     "delete_draft",
-                    "mark_thread_spam"
+                    "mark_thread_spam",
+                    "trash_message",
+                    "untrash_message",
+                    "label_message",
+                    "unlabel_message",
+                    "mark_message_spam"
                 ]
             },
             {

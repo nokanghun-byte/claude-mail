@@ -607,6 +607,7 @@ var CATS = [
 ];
 var BILL_RE = /(결제|영수증|청구|요금|명세서|약관|입금|이체|납부|receipt|invoice|payment)/i;
 var AD_RE = /^\s*[\(\[]\s*광고\s*[\)\]]/;
+var ACT_RE = /(인증|코드|OTP|로그인|보안|비밀번호|예약|verif|passcode|code|sign[\s-]?in|log[\s-]?in|security|password|認証|予約|ログイン)/i;
 var IMAP_SKIP = ["Sent Messages","Drafts","내게쓴메일함","스팸편지함","Junk","예약편지함","Deleted Messages","휴지통","Trash"];
 var IMAP_NEWS = ["소셜","SNS","카페"];
 var IMAP_AD = ["프로모션"];
@@ -634,12 +635,14 @@ function classifyGmail(labelIds, subject, sender, userLabelNames){
   var has = function(x){ return labelIds.indexOf(x) !== -1; };
   if (has("CATEGORY_SOCIAL")) return "news";
   if (has("CATEGORY_PROMOTIONS") || AD_RE.test(subject)) return "ad";
+  if (ACT_RE.test(subject)) return "act";
   if (has("CATEGORY_UPDATES") || BILL_RE.test(subject)) return "bill";
   return "act";
 }
 function classifyImap(folder, subject){
   if (IMAP_NEWS.indexOf(folder) !== -1) return "news";
   if (IMAP_AD.indexOf(folder) !== -1 || AD_RE.test(subject)) return "ad";
+  if (ACT_RE.test(subject)) return "act";
   if (IMAP_BILL.indexOf(folder) !== -1 || BILL_RE.test(subject)) return "bill";
   return "act";
 }
@@ -653,6 +656,7 @@ function mapGmailThread(t, labelNames, sent, allowTrash){
   var msgs = (t && t.messages) || [];
   if (!msgs.length) return null;
   var m = msgs[msgs.length - 1];
+  msgs.forEach(function(mm){ if ((Date.parse(mm.date) || 0) > (Date.parse(m.date) || 0)) m = mm; });
   var labelIds = m.labelIds || [];
   if (labelIds.indexOf("DRAFT") !== -1) return null;
   if (!allowTrash && labelIds.indexOf("TRASH") !== -1) return null;
@@ -681,10 +685,23 @@ function mapGmailThread(t, labelNames, sent, allowTrash){
     unread: !sent && labelIds.indexOf("UNREAD") !== -1, sent: !!sent, starred: labelIds.indexOf("STARRED") !== -1,
     chips: userLabels, work: userLabels.length > 0,
     url: /^https:\/\/mail\.google\.com\//.test(url) ? url : "",
-    count: t.messageCount || 1,
+    count: t.messageCount || msgs.length || 1,
     msgIds: msgs.map(function(mm){ return mm.id; }).filter(Boolean),
     cat: classifyGmail(labelIds, subject, m.sender || "", userLabels)
   };
+}
+function splitGmailThread(t, labelNames, sent){
+  var msgs = ((t && t.messages) || []).filter(function(m){ return (m.labelIds || []).indexOf("DRAFT") === -1; });
+  var one = sent || msgs.length < 2 || msgs.some(function(m){ return (m.labelIds || []).indexOf("SENT") !== -1 || m.sender !== msgs[0].sender; });
+  if (one){ var it0 = mapGmailThread(t, labelNames, sent); return it0 ? [it0] : []; }
+  var out = [];
+  msgs.forEach(function(m){
+    var it = mapGmailThread({id: t.id, messages: [m], messageCount: 1, viewUrl: m.viewUrl || t.viewUrl}, labelNames, sent);
+    if (!it) return;
+    it.tid = t.id; it.mid = m.id; it.id = t.id + "~" + m.id; it.msgIds = [m.id];
+    out.push(it);
+  });
+  return out;
 }
 function mapImapMessage(m, sent, trash){
   if (!m || (!sent && !trash && IMAP_SKIP.indexOf(m.folder) !== -1)) return null;
@@ -955,21 +972,31 @@ function fmtSize(n){
     }).catch(function(){ return {}; });   // 라벨 이름이 없어도 목록은 보여 준다
   }
 
+  // Gmail 처리: 대화 단위 도구를, 한 통씩 나눈 메일이면 메일 단위 도구로 바꿔 부른다
+  function gTool(x, tool, extra){
+    var inp = Object.assign({}, extra || {});
+    if (!x.mid){ inp.threadId = x.id; return mcp.callTool("Gmail", tool, inp, {cache: false}); }
+    inp.messageId = x.mid;
+    var p = mcp.callTool("Gmail", tool.replace("_thread", "_message"), inp, {cache: false});
+    if (tool === "untrash_thread") p = p.then(function(){ return mcp.callTool("Gmail", "label_message", {messageId: x.mid, labelIds: ["INBOX"]}, {cache: false}); });
+    return p;
+  }
   function fetchGmail(range, fresh, sent, q){
     var b = rangeBounds(range, new Date());
     if (q) b = {from: addDays(startOfDay(new Date()), -SEARCH_SINCE_DAYS), to: addDays(startOfDay(new Date()), 1)};
     var query = q ? q + (sent ? " in:sent" : " -in:sent") + " -in:drafts newer_than:1y" : sent ? "in:sent after:" + ymd(addDays(b.from, -1), "/") : "after:" + ymd(addDays(b.from, -1), "/") + " -in:sent -in:drafts";
     var items = [], storedAt = null, pages = 0;
     function page(token){
-      var input = {query: query, pageSize: 50, view: "THREAD_VIEW_SUMMARY"};
+      var input = {query: query, pageSize: 50, view: sent ? "THREAD_VIEW_SUMMARY" : "THREAD_VIEW_MINIMAL"};
       if (token) input.pageToken = token;
       return readTool("Gmail", "search_threads", input, fresh).then(function(r){
         var p = r.payload || {};
         if (r.cache && r.cache.storedAt) storedAt = storedAt ? Math.min(storedAt, r.cache.storedAt) : r.cache.storedAt;
         var ts = p.threads || [];
         for (var i = 0; i < ts.length; i++){
-          var it = mapGmailThread(ts[i], labelNames, sent);
-          if (it && inRange(it.dateMs, b)){ it.snippet = decode(it.snippet); it.subject = decode(it.subject); items.push(it); }
+          splitGmailThread(ts[i], labelNames, sent).forEach(function(it){
+            if (inRange(it.dateMs, b)){ it.snippet = decode(it.snippet); it.subject = decode(it.subject); items.push(it); }
+          });
         }
         pages++;
         if (p.nextPageToken && pages < (q ? 2 : 6) * loadMul) return page(p.nextPageToken);
@@ -1171,7 +1198,7 @@ function fmtSize(n){
     x.marking = true; x.markErr = null; render();
     var call = x.acc
       ? mcp.callTool(HOST.imap, "imap_mark_as_read", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
-      : mcp.callTool("Gmail", "unlabel_thread", {threadId: x.id, labelIds: ["UNREAD"]}, {cache: false});
+      : gTool(x, "unlabel_thread", {labelIds: ["UNREAD"]});
     call.then(function(){
       x.unread = false; x.justRead = true; noteState(x);
       if (x.acc) mcp.invalidate(HOST.imap, "imap_search_emails").catch(function(){});
@@ -1201,7 +1228,8 @@ function fmtSize(n){
       });
       return;
     }
-    readTool("Gmail", "get_thread", {threadId: x.id, messageFormat: "FULL_CONTENT"}).catch(function(e){
+    (x.mid ? readTool("Gmail", "get_message", {messageId: x.mid, messageFormat: "FULL_CONTENT"}).then(function(r){ return {payload: {messages: [r.payload || {}]}}; })
+           : readTool("Gmail", "get_thread", {threadId: x.id, messageFormat: "FULL_CONTENT"})).catch(function(e){
       // Gmail 연결은 휴지통 대화 전체(get_thread)는 막지만 메일 한 통씩(get_message)은 열어 준다
       if (!x.inTrash || !/permission/i.test(String(e && e.message || "") + " " + String(e && e.code || ""))) throw e;
       var ids = (x.msgIds && x.msgIds.length) ? x.msgIds : [x.id];
@@ -1322,7 +1350,7 @@ function fmtSize(n){
     x.deleting = true; x.delErr = null; render();
     var call = x.acc
       ? mcp.callTool(HOST.imap, "imap_delete_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
-      : mcp.callTool("Gmail", "trash_thread", {threadId: x.id}, {cache: false});
+      : gTool(x, "trash_thread");
     return call.then(function(){
       x.trashed = true; x.confirmDel = false; delete open[x.id]; dropTrashLists(); delete picked[x.id]; noteState(x);
       trashNote = {x: x};
@@ -1336,7 +1364,7 @@ function fmtSize(n){
     var n = trashNote;
     if (!n || n.undoing) return;
     n.undoing = true; n.error = null; render();
-    mcp.callTool("Gmail", "untrash_thread", {threadId: n.x.id}, {cache: false}).then(function(){
+    gTool(n.x, "untrash_thread").then(function(){
       n.x.trashed = false; n.undone = true; noteState(n.x);
       mcp.invalidate("Gmail", "search_threads").catch(function(){});
     }).catch(function(e){ n.error = e || {code: "upstream_error"}; })
@@ -2673,7 +2701,7 @@ function fmtSize(n){
       tb.appendChild(el("p", "cnote", "Gmail 휴지통에 있는 메일은 Claude의 Gmail 연결로 본문을 열 수 없어요. 받은메일함으로 꺼내면 바로 볼 수 있어요."));
       var tbr = el("div", "tools");
       tbr.appendChild(btn("꺼내서 보기", "primary", function(){
-        act(x, "꺼내기", mcp.callTool("Gmail", "untrash_thread", {threadId: x.id}, {cache: false}), function(){
+        act(x, "꺼내기", gTool(x, "untrash_thread"), function(){
           x.inTrash = false; removeFromList(x);
           Object.keys(store).forEach(function(k){ if (k.indexOf("|inbox|") !== -1) delete store[k]; });
           delete open[x.id]; select(x);
@@ -3012,13 +3040,13 @@ function fmtSize(n){
   function setStar(x, on){
     var call = x.acc
       ? mcp.callTool(HOST.imap, on ? "imap_flag_email" : "imap_unflag_email", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
-      : mcp.callTool("Gmail", on ? "label_thread" : "unlabel_thread", {threadId: x.id, labelIds: ["STARRED"]}, {cache: false});
+      : gTool(x, on ? "label_thread" : "unlabel_thread", {labelIds: ["STARRED"]});
     return act(x, on ? "별표" : "별표 해제", call, function(){ x.starred = on; invalidateLists(x); });
   }
   function markUnread(x){
     var call = x.acc
       ? mcp.callTool(HOST.imap, "imap_mark_as_unread", {accountName: x.acc, folder: x.folder, uid: x.uid}, {cache: false})
-      : mcp.callTool("Gmail", "label_thread", {threadId: x.id, labelIds: ["UNREAD"]}, {cache: false});
+      : gTool(x, "label_thread", {labelIds: ["UNREAD"]});
     return act(x, "안 읽음 표시", call, function(){ x.unread = true; x.justRead = false; invalidateLists(x); });
   }
   // 휴지통 목록은 다음에 열 때 새로 읽는다 (지금 보고 있는 목록은 그대로 두고 화면에서만 뺀다)
@@ -3028,7 +3056,7 @@ function fmtSize(n){
   function restore(x){
     var call = x.acc
       ? mcp.callTool(HOST.imap, "imap_move_email", {accountName: x.acc, folder: x.folder, uid: x.uid, targetFolder: "INBOX"}, {cache: false})
-      : mcp.callTool("Gmail", "untrash_thread", {threadId: x.id}, {cache: false});
+      : gTool(x, "untrash_thread");
     return act(x, "복원", call, function(){ x._restored = true; removeFromList(x); Object.keys(store).forEach(function(k){ if (k.indexOf("|inbox|") !== -1) delete store[k]; }); });
   }
   // 카카오·네이버 휴지통에서 지우면 영구 삭제 (되돌릴 수 없음)
@@ -3076,11 +3104,11 @@ function fmtSize(n){
       loadLabels().then(function(map){
         list.textContent = "";
         item("보관", "받은편지함에서 빼기 (전체보관함에는 남아요)", function(){
-          act(x, "보관", mcp.callTool("Gmail", "unlabel_thread", {threadId: x.id, labelIds: ["INBOX"]}, {cache: false}), function(){ removeFromList(x); });
+          act(x, "보관", gTool(x, "unlabel_thread", {labelIds: ["INBOX"]}), function(){ removeFromList(x); });
         });
         Object.keys(map || {}).filter(function(id){ return /^Label_/.test(id); }).sort(function(a, c){ return String(map[a]).localeCompare(String(map[c])); }).forEach(function(id){
           item(map[id], "라벨 붙이기", function(){
-            act(x, "‘" + map[id] + "’ 라벨", mcp.callTool("Gmail", "label_thread", {threadId: x.id, labelIds: [id]}, {cache: false}), function(){
+            act(x, "‘" + map[id] + "’ 라벨", gTool(x, "label_thread", {labelIds: [id]}), function(){
               if (x.chips.indexOf(map[id]) === -1) x.chips.push(map[id]); x.work = true; invalidateLists(x);
             });
           });
@@ -3092,7 +3120,7 @@ function fmtSize(n){
     return askConfirm("이 메일을 스팸으로 신고할까요? 스팸함으로 옮겨져요.", "스팸 신고", true).then(function(ok){ if (ok) return doReportSpam(x); });
   }
   function doReportSpam(x){
-    if (!x.acc) return act(x, "스팸 신고", mcp.callTool("Gmail", "mark_thread_spam", {threadId: x.id}, {cache: false}), function(){ removeFromList(x); });
+    if (!x.acc) return act(x, "스팸 신고", gTool(x, "mark_thread_spam"), function(){ removeFromList(x); });
     bump(x, "스팸함 찾는 중…");
     imapFolders(x.acc).then(function(fds){
       var junk = fds.filter(function(fd){ return /junk/i.test(fd.use) || /^(스팸편지함|Junk|Spam|스팸)$/i.test(fd.name); })[0];
