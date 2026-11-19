@@ -32,6 +32,36 @@ let w = readFileSync(join(dist, "setup.js"), "utf8").replace(/^#!.*\n/, "");
 const cli = w.indexOf('program.name("imap-setup")');
 if (cli < 0) throw new Error("setup.js 구조가 바뀌었어요");
 w = w.slice(0, cli) + "export { WebUIServer };\n";
+// 2-1) 등록 화면 손보기: 'Command failed' 대신 이유를 한국어로, Gmail 앱 비밀번호의 띄어쓰기 제거
+function must(from, to){ if (w.indexOf(from) < 0) throw new Error("setup.js 패치 위치를 못 찾았어요: " + from.slice(0, 60)); w = w.split(from).join(to); }
+w += `
+function cleanPw(pw, host) {
+  const s = String(pw == null ? "" : pw);
+  return /gmail|google/i.test(String(host || "")) ? s.replace(/\\s+/g, "") : s.trim();
+}
+function friendlyImapError(error, host) {
+  const msg = error instanceof Error ? error.message : String(error || "");
+  const resp = (error && (error.responseText || error.response)) || "";
+  const g = /gmail|google/i.test(String(host || ""));
+  // 접속 단계에서 원래 오류가 'Command failed' 한 줄로 바뀌어 오는데, 이건 거의 항상 로그인 거부다
+  if (error && error.authenticationFailed || /^Command failed\\.?$/i.test(msg.trim()) || /AUTHENTICATIONFAILED|Invalid credentials|LOGIN failed|authentication failed/i.test(msg + " " + resp)) {
+    return g
+      ? "Gmail이 로그인을 거부했어요 (아이디 또는 비밀번호 오류). 평소 Google 비밀번호가 아니라 16자리 '앱 비밀번호'를 넣어야 해요. 2단계 인증을 켠 뒤 https://myaccount.google.com/apppasswords 에서 만들 수 있어요."
+      : "메일 서버가 로그인을 거부했어요 (아이디 또는 비밀번호 오류). 메일 설정에서 IMAP/SMTP 사용을 켰는지, 앱 비밀번호(또는 외부 메일 프로그램용 비밀번호)를 넣었는지 확인해 주세요." + (resp ? " (서버 응답: " + resp + ")" : "");
+  }
+  if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) return "서버 주소를 찾지 못했어요. IMAP 서버 주소를 확인해 주세요.";
+  if (/ETIMEDOUT|ECONNREFUSED|timeout/i.test(msg)) return "서버에 연결하지 못했어요. 서버 주소·포트(보통 993)와 인터넷 연결을 확인해 주세요.";
+  return (msg || "연결 시험 실패") + (resp ? " (" + resp + ")" : "");
+}
+`;
+must('const { email, password, host, port, tls, imapUsername } = req.body;',
+     'const { email, password: rawPassword, host, port, tls, imapUsername } = req.body;\n        const password = cleanPw(rawPassword, host || "imap.gmail.com");');
+must('error: error instanceof Error ? error.message : "Connection test failed"',
+     'error: friendlyImapError(error, req.body && req.body.host)');
+must('password: imapPasswordFromEnv ? "" : password,',
+     'password: imapPasswordFromEnv ? "" : cleanPw(password, imapHost),');
+must('            ...smtp,\n',
+     '            ...smtp,\n            ...smtp.password ? { password: cleanPw(smtp.password, smtp.host || imapHost) } : {},\n');
 writeFileSync(join(dist, "setup-core.mjs"), w);
 
 // 3) 복사
