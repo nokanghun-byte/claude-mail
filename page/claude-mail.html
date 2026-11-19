@@ -496,6 +496,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .btn.danger:hover{background:var(--danger-soft)}
 .tools.sub .btn{padding:6px 11px;font-size:12.5px;box-shadow:none;background:transparent}
 .tools.sub .btn:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.tools.sub .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tools.sub .btn.primary:hover{background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
 .btn.staron{color:#C98100;border-color:color-mix(in srgb,#F5A623 45%,var(--line));background:color-mix(in srgb,#F5A623 10%,transparent)}
 .card{border-radius:16px;box-shadow:var(--shadow-md);border:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
 .body{font-size:16px;line-height:1.75;padding:20px 22px;color:var(--ink2);text-wrap:pretty}
@@ -680,6 +682,7 @@ function mapGmailThread(t, labelNames, sent, allowTrash){
     chips: userLabels, work: userLabels.length > 0,
     url: /^https:\/\/mail\.google\.com\//.test(url) ? url : "",
     count: t.messageCount || 1,
+    msgIds: msgs.map(function(mm){ return mm.id; }).filter(Boolean),
     cat: classifyGmail(labelIds, subject, m.sender || "", userLabels)
   };
 }
@@ -1198,7 +1201,13 @@ function fmtSize(n){
       });
       return;
     }
-    readTool("Gmail", "get_thread", {threadId: x.id, messageFormat: "FULL_CONTENT"}).then(function(r){
+    readTool("Gmail", "get_thread", {threadId: x.id, messageFormat: "FULL_CONTENT"}).catch(function(e){
+      // Gmail 연결은 휴지통 대화 전체(get_thread)는 막지만 메일 한 통씩(get_message)은 열어 준다
+      if (!x.inTrash || !/permission/i.test(String(e && e.message || "") + " " + String(e && e.code || ""))) throw e;
+      var ids = (x.msgIds && x.msgIds.length) ? x.msgIds : [x.id];
+      return Promise.all(ids.map(function(id){ return readTool("Gmail", "get_message", {messageId: id, messageFormat: "FULL_CONTENT"}); }))
+        .then(function(rs){ return {payload: {messages: rs.map(function(r){ return r.payload || {}; }).filter(function(m){ return m.id; })}}; });
+    }).then(function(r){
       var p = r.payload || {}, ms = p.messages || [], out = [];
       for (var i = 0; i < ms.length; i++){
         var m = ms[i], nm = m.sender || "", ns = m.addressDisplayNames || [];

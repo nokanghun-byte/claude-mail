@@ -7,6 +7,7 @@
                     "search_threads",
                     "list_labels",
                     "get_thread",
+                    "get_message",
                     "unlabel_thread",
                     "label_thread",
                     "download_gmail_attachment",
