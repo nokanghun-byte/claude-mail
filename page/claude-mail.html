@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Email</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
 /* 레이아웃: 메일 웹처럼 세 칸. 왼쪽 계정·분류, 가운데 목록, 오른쪽 읽기 창. 좁은 화면에서는 목록과 읽기 창을 번갈아 보여 준다. */
 :root{
@@ -25,7 +28,7 @@
   --bill:#00A661;
   --news:#7B61FF;
   --ad:#8B95A1;
-  --font:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  --font:"IBM Plex Sans KR","Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
@@ -369,6 +372,171 @@ a{color:inherit}
   .rsubj{font-size:20px}
   .mrow{padding:12px 8px}
 }
+
+/* ---------- 마감 다듬기 ----------
+   방향: 색은 '받은 메일의 주인'(계정)과 '할 일'(파란 강조)에만 쓰고, 나머지는 잉크의 농담으로 정리한다.
+   진한 색 덩어리(꽉 찬 아바타·계정 배지)를 옅은 바탕 + 진한 글자로 바꿔 목록이 한눈에 읽히게 한다. */
+[hidden]{display:none !important}
+:root{
+  --shadow-sm:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.04);
+  --shadow-md:0 4px 12px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.05);
+  --shadow-lg:0 18px 48px rgba(15,23,42,.16),0 4px 12px rgba(15,23,42,.06);
+  --ring:color-mix(in srgb,var(--accent) 45%,transparent);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow-md:0 4px 14px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-lg:0 20px 56px rgba(0,0,0,.55),0 4px 12px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --shadow-md:0 4px 14px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 56px rgba(0,0,0,.55),0 4px 12px rgba(0,0,0,.35);
+}
+body{letter-spacing:-0.005em;font-feature-settings:"tnum" 0;word-break:keep-all;overflow-wrap:break-word;caret-color:var(--accent)}
+::selection{background:color-mix(in srgb,var(--accent) 24%,transparent);color:inherit}
+*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--faint) 45%,transparent) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--faint) 40%,transparent);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background-color:color-mix(in srgb,var(--faint) 65%,transparent)}
+::-webkit-scrollbar-track{background:transparent}
+button,a,.mrow,.navbtn,.btn,.file,.toast{transition:background-color .15s ease-out,color .15s ease-out,box-shadow .15s ease-out,border-color .15s ease-out}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+
+/* 왼쪽 */
+.side{padding:28px 16px 20px;gap:4px}
+.brand{font-size:20px;font-weight:700;letter-spacing:-0.03em;padding:0 10px 18px;display:flex;align-items:center;gap:10px}
+.brand::before{content:"";width:26px;height:26px;border-radius:8px;flex:none;
+  background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2.5'/%3E%3Cpath d='m4 7 8 6 8-6'/%3E%3C/svg%3E") center/16px no-repeat}
+.writebtn{box-shadow:0 1px 2px color-mix(in srgb,var(--accent) 30%,transparent),0 4px 12px color-mix(in srgb,var(--accent) 22%,transparent);margin:0 0 18px}
+.side-h{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--faint);padding:22px 12px 8px}
+.navbtn{padding:9px 12px;border-radius:10px;font-size:14.5px}
+.navbtn:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.navbtn[aria-pressed="true"]{background:var(--surface);box-shadow:var(--shadow-sm)}
+.navbtn .ic{width:26px;height:26px;border-radius:8px;font-size:12.5px;
+  background:color-mix(in srgb,var(--c) 15%,var(--surface));color:color-mix(in srgb,var(--c) 78%,var(--ink))}
+.navbtn[aria-pressed="true"] .ic{background:var(--c);color:#FFFFFF}
+.navbtn .ic svg{width:15px;height:15px}
+.navbtn.imaplink .ic{background:transparent;border:1.5px dashed color-mix(in srgb,var(--faint) 60%,transparent);color:var(--muted)}
+.navbtn.imaplink:hover{color:var(--ink2)}
+.navbtn .dot{width:7px;height:7px}
+.navbtn .num{font-size:12.5px}
+.navbtn .num.on{color:var(--accent);font-weight:700}
+.side-foot{font-size:12px;color:var(--faint);opacity:.9}
+
+/* 가운데 */
+.listpane{border-color:var(--line)}
+.lhead{padding:24px 20px 14px;gap:14px;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px)}
+.lrow h1{font-size:21px;letter-spacing:-0.03em;text-wrap:balance}
+.lrow{gap:6px}
+.btn.ai{background:color-mix(in srgb,var(--news) 9%,var(--surface));border-color:transparent;color:color-mix(in srgb,var(--news) 85%,var(--ink));padding:7px 12px 7px 10px}
+.btn.ai:hover{background:color-mix(in srgb,var(--news) 15%,var(--surface))}
+.btn svg{width:16px;height:16px;flex:none}
+.iconbtn svg{width:19px;height:19px}
+#qClear svg{width:16px;height:16px}
+.seg{border-radius:10px;padding:3px;background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.seg button{padding:6px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{box-shadow:var(--shadow-sm)}
+.switch{font-size:13px}
+.switch input{width:32px;height:19px}
+.switch input::after{width:15px;height:15px}
+.switch input:checked::after{transform:translateX(13px)}
+.searchbox{height:42px;border-radius:12px;background:color-mix(in srgb,var(--ink) 4.5%,transparent);border:1px solid transparent}
+.searchbox:focus-within{outline:none;background:var(--surface);border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.searchbox input::placeholder{color:var(--faint)}
+.fresh{font-size:12px}
+.mlist{padding:8px 10px 32px;display:flex;flex-direction:column;gap:2px}
+.mrow{grid-template-columns:38px minmax(0,1fr);gap:12px;padding:13px 12px;border-radius:12px}
+.mrow:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.mrow.unread{background:color-mix(in srgb,var(--accent) 5.5%,transparent)}
+.mrow.unread:hover{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.mrow[aria-current="true"],.mrow.picked{background:color-mix(in srgb,var(--accent) 12%,var(--surface));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 28%,transparent)}
+.mrow.cursor{box-shadow:inset 0 0 0 1.5px var(--ring)}
+.mrow .av,.avwrap{width:38px;height:38px}
+.av{font-size:14px;font-weight:700;background:color-mix(in srgb,var(--c) 16%,var(--surface));color:color-mix(in srgb,var(--c) 80%,var(--ink))}
+.mrow:not(.unread) .av{opacity:.7;filter:saturate(.75)}
+.mtop{gap:6px}
+.mfrom{font-size:13.5px}
+.unread .mfrom{font-weight:700}
+.msubj{font-size:14.5px;line-height:1.45}
+.unread .msubj{font-weight:700}
+.msnip{font-size:13px;line-height:1.5}
+.mtime{font-size:12px}
+.udot{width:8px;height:8px;box-shadow:none}
+.rdot{font-size:11px;font-weight:500;opacity:.85}
+.star{display:inline-grid;place-items:center;color:#F5A623}
+.star svg{width:13px;height:13px}
+.tags{gap:4px;margin-top:6px}
+.tag{font-size:11.5px;font-weight:600;border-radius:5px;padding:1px 6px;line-height:1.55}
+.tag.acct{background:none;color:var(--muted);padding:1px 2px 1px 0;display:inline-flex;align-items:center;gap:5px;font-weight:600}
+.tag.acct::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c)}
+.tag.cat{color:color-mix(in srgb,var(--c) 82%,var(--ink));background:color-mix(in srgb,var(--c) 10%,transparent)}
+.tag.work{color:var(--muted);background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.empty{padding:64px 24px;font-size:14px;line-height:1.6}
+.skel{height:62px;border-radius:12px;margin:6px 10px}
+.bulkbar{margin:10px 12px 2px;padding:8px 10px;border-radius:12px;box-shadow:var(--shadow-md)}
+.note{border-radius:12px;font-size:13px;line-height:1.55}
+
+/* 오른쪽 */
+.reader{padding:28px 36px 64px;gap:16px;max-width:880px}
+.rsubj{font-size:25px;line-height:1.38;letter-spacing:-0.03em;text-wrap:balance;margin-top:2px}
+.rmeta{gap:12px}
+.rtags{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;align-self:center}
+@media (min-width:1101px){.rtop{display:none}}
+.rmeta .av{width:40px;height:40px}
+.rmeta .nm{font-size:15px}
+.rmeta .dt{font-size:12.5px}
+.tools{gap:6px}
+.btn{border-radius:10px;padding:8px 14px;font-size:13.5px;border-color:var(--line);box-shadow:var(--shadow-sm)}
+.btn:hover{background:var(--surface2);border-color:color-mix(in srgb,var(--ink) 14%,transparent)}
+.btn:active{transform:translateY(.5px)}
+.btn.primary{box-shadow:0 1px 2px color-mix(in srgb,var(--accent) 35%,transparent)}
+.btn.primary:hover{filter:none;background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
+.btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 25%,var(--line))}
+.btn.danger:hover{background:var(--danger-soft)}
+.tools.sub .btn{padding:6px 11px;font-size:12.5px;box-shadow:none;background:transparent}
+.tools.sub .btn:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.btn.staron{color:#C98100;border-color:color-mix(in srgb,#F5A623 45%,var(--line));background:color-mix(in srgb,#F5A623 10%,transparent)}
+.card{border-radius:16px;box-shadow:var(--shadow-md);border:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.body{font-size:16px;line-height:1.75;padding:20px 22px;color:var(--ink2);text-wrap:pretty}
+.mailframe{border-radius:12px}
+.sec-h{font-size:14px;font-weight:700;color:var(--ink2);margin:10px 2px 0}
+.file{border-radius:12px;box-shadow:var(--shadow-sm)}
+.file:hover{border-color:color-mix(in srgb,var(--ink) 14%,transparent)}
+.file .fx,.driveitem .fx{border-radius:9px;font-size:10px;letter-spacing:.02em;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:color-mix(in srgb,var(--c) 82%,var(--ink))}
+.aicard{border-radius:14px}
+.ghost{color:var(--faint);font-size:14px}
+.ghost svg{opacity:.35}
+
+/* 팝업·알림 */
+.overlay{background:rgba(15,23,42,.38);backdrop-filter:blur(2px)}
+.modal{border-radius:18px;box-shadow:var(--shadow-lg);border:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.mhead{padding:18px 20px 12px}
+.mhead b{font-size:17px;letter-spacing:-0.02em}
+.mbody{padding:0 20px 20px}
+.cbody,.csigbox{border-radius:12px}
+.cbody:focus,.csigbox:focus{outline:none;border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.fchip button{display:grid;place-items:center}
+.fchip button svg{width:13px;height:13px}
+.toast{border-radius:16px;box-shadow:var(--shadow-lg);animation:tin .32s cubic-bezier(.16,1,.3,1)}
+.tic{border-radius:11px;background:color-mix(in srgb,var(--c) 16%,var(--surface));color:color-mix(in srgb,var(--c) 80%,var(--ink))}
+.toast .iconbtn svg{width:15px;height:15px}
+.iconbtn{border-radius:9px}
+
+@media (max-width:1100px){ .reader{padding:20px 24px 56px} }
+@media (max-width:720px){
+  .side{padding:12px 16px 6px}
+  .brand{display:none}
+  .card .body{padding:14px}
+  .navbtn{padding:7px 12px;border-radius:999px;font-size:13.5px;box-shadow:none}
+  .navbtn[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+  .lhead{padding:14px 16px 12px;backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--surface)}
+  .reader{padding:12px 16px 48px}
+  .rsubj{font-size:20px}
+  .body{padding:16px}
+}
 </style>
 </head>
 <body>
@@ -379,7 +547,7 @@ a{color:inherit}
     <nav class="nav" id="accts" aria-label="메일 계정">
       <button type="button" class="navbtn" data-account="all" style="--c:#3182F6"><span class="ic">전</span><span class="lbl">전체 메일함</span><span class="num"></span></button>
       <button type="button" class="navbtn" data-account="gmail" style="--c:#EA4335"><span class="ic">G</span><span class="lbl">Gmail</span><span class="num"></span></button>
-      <button type="button" class="navbtn imaplink" id="imapLink" style="--c:var(--faint)"><span class="ic">+</span><span class="lbl">다른 메일 연결</span></button>
+      <button type="button" class="navbtn imaplink" id="imapLink" style="--c:var(--faint)"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lbl">다른 메일 연결</span></button>
     </nav>
     <div class="side-h">메일함</div>
     <nav class="nav" id="boxes" aria-label="메일함">
@@ -398,8 +566,8 @@ a{color:inherit}
     <header class="lhead">
       <div class="lrow">
         <h1 id="ltitle">Gmail</h1>
-        <button type="button" class="btn ai" id="todoBtn" title="지금 목록에서 처리할 메일만 뽑기">할 일</button>
-        <button type="button" class="iconbtn" id="helpBtn" title="단축키 (?)" aria-label="단축키">?</button>
+        <button type="button" class="btn ai" id="todoBtn" title="지금 목록에서 처리할 메일만 뽑기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>할 일</button>
+        <button type="button" class="iconbtn" id="helpBtn" title="단축키 (?)" aria-label="단축키"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7 14h10"/></svg></button>
         <button type="button" class="btn primary writesm" id="composeBtn2">쓰기</button>
         <button type="button" class="iconbtn" id="refresh" title="새로 고침" aria-label="새로 고침">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
@@ -417,7 +585,7 @@ a{color:inherit}
       <form class="searchbox" id="searchForm" role="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input type="search" id="q" placeholder="보낸 사람, 제목으로 검색" autocomplete="off" aria-label="메일 검색">
-        <button type="button" class="iconbtn" id="qClear" title="검색 지우기" aria-label="검색 지우기" hidden>✕</button>
+        <button type="button" class="iconbtn" id="qClear" title="검색 지우기" aria-label="검색 지우기" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </form>
       <span class="fresh" id="fresh">불러오는 중</span>
     </header>
@@ -754,6 +922,12 @@ function fmtSize(n){
     if (text != null) n.textContent = text;
     return n;
   }
+  var ICON = {
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8z"/></svg>'
+  };
+  function iconBtn(name, cls){ var b = el("button", cls === undefined ? "iconbtn" : cls); b.innerHTML = ICON[name]; return b; }
   var decoder = document.createElement("textarea");
   function decode(s){ decoder.innerHTML = String(s || ""); return decoder.value; }
   function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
@@ -1327,7 +1501,7 @@ function fmtSize(n){
       sb.addEventListener("click", function(){ saveAtt(a, s); });
       vh.appendChild(sb);
     }
-    var cl = el("button", "iconbtn", "✕"); cl.type = "button"; cl.title = "미리보기 닫기"; cl.setAttribute("aria-label", "미리보기 닫기");
+    var cl = iconBtn("x"); cl.type = "button"; cl.title = "미리보기 닫기"; cl.setAttribute("aria-label", "미리보기 닫기");
     cl.addEventListener("click", function(){ toggleAtt(x, o, a); });
     vh.appendChild(cl);
     v.appendChild(vh);
@@ -1491,7 +1665,7 @@ function fmtSize(n){
     var win = el("div", "modal"); win.setAttribute("role", "dialog"); win.setAttribute("aria-modal", "true"); win.setAttribute("aria-label", title);
     var hd = el("div", "mhead");
     hd.appendChild(el("b", null, title));
-    var xb = el("button", "iconbtn", "✕"); xb.type = "button"; xb.title = "닫기"; xb.setAttribute("aria-label", "닫기");
+    var xb = iconBtn("x"); xb.type = "button"; xb.title = "닫기"; xb.setAttribute("aria-label", "닫기");
     xb.addEventListener("click", function(){ onClose(); });
     hd.appendChild(xb);
     win.appendChild(hd);
@@ -1886,7 +2060,7 @@ function fmtSize(n){
           var rcOk = c.rcStatus && c.rcStatus.ok;
           chip.classList.add(rcOk ? "drive" : "toobig"); chip.appendChild(el("em", null, rcOk ? "Drive 링크" : "Gmail에서"));
         }
-        var rm = el("button", null, "✕"); rm.type = "button"; rm.title = f.name + " 빼기"; rm.setAttribute("aria-label", f.name + " 빼기");
+        var rm = iconBtn("x", null); rm.type = "button"; rm.title = f.name + " 빼기"; rm.setAttribute("aria-label", f.name + " 빼기");
         rm.addEventListener("click", function(){ if (!c.busy){ c.files.splice(i, 1); drawFiles(); } });
         chip.appendChild(rm);
         fileBar.appendChild(chip);
@@ -1895,7 +2069,7 @@ function fmtSize(n){
         var chip = el("span", "fchip drive");
         chip.appendChild(el("span", null, d.title + (d.size ? " · " + fmtSize(d.size) : "")));
         chip.appendChild(el("em", null, "Drive"));
-        var rm = el("button", null, "✕"); rm.type = "button"; rm.title = d.title + " 빼기"; rm.setAttribute("aria-label", d.title + " 빼기");
+        var rm = iconBtn("x", null); rm.type = "button"; rm.title = d.title + " 빼기"; rm.setAttribute("aria-label", d.title + " 빼기");
         rm.addEventListener("click", function(){ if (!c.busy){ c.driveLinks.splice(i, 1); drawFiles(); } });
         chip.appendChild(rm);
         fileBar.appendChild(chip);
@@ -2337,15 +2511,15 @@ function fmtSize(n){
   function readerView(x, o){
     var wrap = el("div", "reader");
     var top = el("div", "rtop");
-    var back = el("button", "iconbtn back", "←"); back.type = "button"; back.title = "목록으로"; back.setAttribute("aria-label", "목록으로");
+    var back = el("button", "iconbtn back"); back.innerHTML = ICON.back; back.type = "button"; back.title = "목록으로"; back.setAttribute("aria-label", "목록으로");
     back.addEventListener("click", closeReader);
     top.appendChild(back);
-    var cat = catOf(x.cat);
-    var tg = el("span", "tag cat", cat.label); tg.style.setProperty("--c", cat.color);
-    top.appendChild(tg);
-    x.chips.forEach(function(nm){ top.appendChild(el("span", "tag" + (x.work ? " work" : ""), nm)); });
     wrap.appendChild(top);
     wrap.appendChild(el("h2", "rsubj", x.subject));
+    var cat = catOf(x.cat), rtags = el("div", "rtags");
+    var tg = el("span", "tag cat", cat.label); tg.style.setProperty("--c", cat.color);
+    rtags.appendChild(tg);
+    x.chips.forEach(function(nm){ rtags.appendChild(el("span", "tag" + (x.work ? " work" : ""), nm)); });
 
     var meta = el("div", "rmeta");
     meta.appendChild(avatar(x.from));
@@ -2353,6 +2527,7 @@ function fmtSize(n){
     who.appendChild(el("span", "nm", (x.sent ? "받는 사람: " : "") + x.from));
     who.appendChild(el("span", "dt", fmtFull(x.dateMs) + (x.count > 1 ? " · 대화 " + x.count + "통" : "")));
     meta.appendChild(who);
+    meta.appendChild(rtags);
     wrap.appendChild(meta);
 
     // 도구 줄
@@ -2371,7 +2546,7 @@ function fmtSize(n){
       if (x.acc) t2.appendChild(btn("영구 삭제", "danger", function(){ purge(x); }));
       else t2.appendChild(el("span", "status", "Gmail 휴지통 메일은 30일 뒤 자동으로 영구 삭제돼요."));
     }
-    if (!x.inTrash) t2.appendChild(btn(x.starred ? "★ 별표 해제" : "☆ 별표", x.starred ? "staron" : "", function(){ setStar(x, !x.starred); }));
+    if (!x.inTrash) t2.appendChild(btn(x.starred ? "별표 해제" : "별표", x.starred ? "staron" : "", function(){ setStar(x, !x.starred); }));
     if (!x.sent && !x.inTrash) t2.appendChild(btn(x.unread ? "읽음으로" : "안 읽음으로", "", function(){ if (x.unread) markRead(x); else markUnread(x); }));
     if (!x.sent && !x.inTrash) t2.appendChild(btn(x.acc ? "폴더로 이동" : "라벨·보관", "", function(){ openMove(x); }));
     if (!x.sent && !x.inTrash) t2.appendChild(btn("스팸 신고", "", function(){ reportSpam(x); }));
@@ -2668,7 +2843,7 @@ function fmtSize(n){
         t1.appendChild(el("span", "mfrom", (x.sent && !x.inTrash ? "받는 사람: " : "") + x.from + (x.count > 1 ? " (" + x.count + ")" : "")));
         if (x.unread){ var ud = el("span", "udot"); ud.title = "안 읽음"; ud.setAttribute("aria-label", "안 읽음"); t1.appendChild(ud); }
         else if (!x.sent && !x.isDraft) t1.appendChild(el("span", "rdot", "읽음"));
-        if (x.starred) t1.appendChild(el("span", "star on", "★"));
+        if (x.starred){ var stv = el("span", "star on"); stv.innerHTML = ICON.star; stv.setAttribute("aria-label", "별표"); t1.appendChild(stv); }
         t1.appendChild(el("span", "mtime", fmtTime(x.dateMs, wide || state.range === "month" || !!state.q || x.isDraft)));
         mm.appendChild(t1);
         mm.appendChild(el("span", "msubj", x.subject));
@@ -3190,7 +3365,7 @@ function fmtSize(n){
         b.appendChild(el("span", "ts", list.slice(0, 3).map(function(y){ return y.from; }).join(", ") + " 외"));
       }
       t.appendChild(b);
-      var cl = el("button", "iconbtn", "✕"); cl.type = "button"; cl.title = "알림 닫기"; cl.setAttribute("aria-label", "알림 닫기");
+      var cl = iconBtn("x"); cl.type = "button"; cl.title = "알림 닫기"; cl.setAttribute("aria-label", "알림 닫기");
       cl.addEventListener("click", function(e){ e.stopPropagation(); gone(); });
       t.appendChild(cl);
       function gone(){ t.classList.add("out"); setTimeout(function(){ t.remove(); }, 200); }
