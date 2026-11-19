@@ -231,8 +231,6 @@ a{color:inherit}
 .confirmwin{width:min(420px,100%)}
 .askmsg{margin:0 0 6px;font-size:15px;line-height:1.6;color:var(--ink2);overflow-wrap:anywhere}
 
-.trcard{background:color-mix(in srgb,var(--accent) 7%,var(--surface));border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
-.trcard b{color:var(--accent)}
 .mlist li.swipe{position:relative;border-radius:14px;overflow:hidden}
 .swipebg{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:24px;background:var(--danger);color:#FFFFFF;font-weight:700;font-size:15px;border-radius:14px;opacity:0;transition:opacity .15s}
 .mlist li.swiping .swipebg{opacity:1}
@@ -241,8 +239,6 @@ a{color:inherit}
 .mlist li.swipe .mrow:hover{background:var(--surface2)}
 .mlist li.swipe .mrow[aria-current="true"],.mlist li.swipe .mrow.picked{background:var(--accent-soft)}
 
-.trlink{display:inline-block;font-size:12.5px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:0 6px;margin:0 2px;text-decoration:none}
-.trlink:hover{text-decoration:underline}
 
 .driveitem{flex-direction:row;align-items:center;gap:10px}
 .driveitem .fx{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:10.5px;font-weight:800;color:#FFFFFF;background:var(--c);flex:none}
@@ -2570,7 +2566,10 @@ function fmtSize(n){
     back.addEventListener("click", closeReader);
     top.appendChild(back);
     wrap.appendChild(top);
-    wrap.appendChild(el("h2", "rsubj", x.subject));
+    var subjTr = o.trOn && o.trMap && o.trMap[trKey(x.subject || "")];
+    var hs = el("h2", "rsubj", subjTr || x.subject);
+    if (subjTr) hs.title = x.subject;
+    wrap.appendChild(hs);
     var cat = catOf(x.cat), rtags = el("div", "rtags");
     var tg = el("span", "tag cat", cat.label); tg.style.setProperty("--c", cat.color);
     rtags.appendChild(tg);
@@ -2588,7 +2587,7 @@ function fmtSize(n){
     // 도구 줄
     var tools = el("div", "tools");
     if (o.msgs && o.msgs.some(function(m){ return m.html; }))
-      tools.appendChild(btn(o.textOnly ? "원래 모양으로 보기" : "글자만 보기", "", function(){ o.textOnly = !o.textOnly; render(); }));
+      tools.appendChild(btn(o.textOnly ? "원래 모양으로 보기" : "글자만 보기", "", function(){ o.textOnly = !o.textOnly; if (o.trOn) translate(x, o); render(); }));
     if (x.url){ var ga = el("a", "btn", "Gmail에서 열기"); ga.href = x.url; ga.target = "_blank"; ga.rel = "noopener noreferrer"; tools.appendChild(ga); }
     if (!o.loading && !o.error){
       tools.appendChild(btn("답장", "primary", function(){ openComposer(x, o, false); }));
@@ -2608,22 +2607,18 @@ function fmtSize(n){
     var unsub = !o.loading && !o.error ? findUnsub(o) : "";
     if (unsub){ var ua = el("a", "btn", "수신 거부"); ua.href = unsub; ua.target = "_blank"; ua.rel = "noopener noreferrer"; ua.title = "보낸 쪽의 수신 거부 페이지를 새 창으로 열어요"; t2.appendChild(ua); }
     if (!o.loading && !o.error) t2.appendChild(btn(o.ai && o.ai.text ? "AI 요약 다시" : "AI 요약", "ai", function(){ summarize(x, o); }));
-    if (!o.loading && !o.error && isForeign(x, o)) t2.appendChild(btn(o.tr && (o.tr.text || o.tr.loading) ? (o.tr.hidden ? "번역 보기" : "번역 접기") : "한국어로 번역", "ai", function(){
-      if (o.tr && o.tr.text && !o.tr.loading){ o.tr.hidden = !o.tr.hidden; bump(x); return; }
-      translate(x, o);
-    }));
+    if (!o.loading && !o.error && (o.trOn || isForeign(x, o))){
+      if (!o.trOn) t2.appendChild(btn(o.trMap ? "번역 보기" : "한국어로 번역", "ai", function(){ translate(x, o); }));
+      else {
+        t2.appendChild(btn("원문 보기", "ai on", function(){ o.trOn = false; bump(x); }));
+        if (o.trErr) t2.appendChild(btn("남은 부분 번역", "", function(){ translate(x, o); }));
+      }
+      if (o.trOn && o.trBusy) t2.appendChild(el("span", "status", "본문을 번역하는 중… " + o.trBusy.done + "/" + o.trBusy.total));
+      else if (o.trOn && o.trErr) t2.appendChild(el("span", "status bad", o.trErr));
+      else if (o.trOn) t2.appendChild(el("span", "status", "Claude가 번역한 본문이에요"));
+    }
     if (x.actMsg) t2.appendChild(el("span", "status" + (x.actBad ? " bad" : " ok"), x.actMsg));
     var afterTools = [t2];
-    if (o.tr && !o.tr.hidden && (o.tr.loading || o.tr.text || o.tr.error)){
-      var trc = el("div", "aicard trcard");
-      trc.appendChild(el("b", null, "한국어 번역"));
-      var trtx = el("div", "aitext");
-      if (o.tr.text) fillWithLinks(trtx, o.tr.text, o.tr.links); else trtx.textContent = o.tr.loading ? "번역하는 중…" : "";
-      o.tr.node = trtx;
-      trc.appendChild(trtx);
-      if (o.tr.error) trc.appendChild(el("span", "status bad", o.tr.error));
-      afterTools.push(trc);
-    }
     if (o.ai && (o.ai.loading || o.ai.text || o.ai.error)){
       var aic = el("div", "aicard");
       aic.appendChild(el("b", null, "AI 요약"));
@@ -2703,8 +2698,8 @@ function fmtSize(n){
     o.msgs.forEach(function(m, i){
       var card = el("div", "card" + ((m.html && !o.textOnly) ? "" : " pad"));
       if (o.msgs.length > 1) card.appendChild(el("div", "msgsep", (i + 1) + ". " + m.from + " · " + fmtTime(m.dateMs, true)));
-      if (m.html && !o.textOnly) card.appendChild(mailFrame(m.htmlShown || m.html, false));
-      else card.appendChild(el("p", "body", m.body || "(본문 없음)"));
+      if (m.html && !o.textOnly) card.appendChild(mailFrame(o.trOn && o.trMap ? trHtml(m, o) : (m.htmlShown || m.html), false));
+      else card.appendChild(el("p", "body", (o.trOn && o.trMap ? trText(m.body, o) : m.body) || "(본문 없음)"));
       if (m.truncated && !o.textOnly) card.appendChild(el("div", "msgsep", "본문이 길어 뒷부분이 잘렸을 수 있습니다."));
       wrap.appendChild(card);
       m.att.forEach(function(a){ if (!isInlinePart(a, m)) allAtt.push(a); });
@@ -2737,7 +2732,7 @@ function fmtSize(n){
     if (!x) return "none|" + (mcpReady ? 1 : 0);
     var a = o && o.atts ? Object.keys(o.atts).map(function(k){ var s = o.atts[k]; return k + ":" + (s.loading ? "L" : "") + (s.shown ? "S" : "") + (s.error ? "E" : "") + (s.saveMsg || ""); }).join(",") : "";
     return [x.id, o ? (o.loading ? "L" : o.error ? "E" : "R") : "-", o && o.showImages, o && o.imgVer, o && o.imgMsg, o && o.textOnly, x.confirmDel, x.deleting, !!x.delErr,
-            x.replyMsg || "", x.ver || 0, o && o.tr ? (o.tr.loading ? "tL" : o.tr.error ? "tE" : o.tr.text ? "tT" + (o.tr.hidden ? "h" : "") : "") : "", o && o.ai ? (o.ai.loading ? "aL" : o.ai.error ? "aE" : o.ai.text ? "aT" : "") : "",
+            x.replyMsg || "", x.ver || 0, o && o.trOn ? "t" + (o.trVer || 0) + (o.trBusy ? "B" + o.trBusy.done : "") + (o.trErr ? "E" : "") : "", o && o.ai ? (o.ai.loading ? "aL" : o.ai.error ? "aE" : o.ai.text ? "aT" : "") : "",
             x.marking, !!x.markErr, x.justRead, a, downloads ? 1 : 0].join("|");
   }
 
@@ -3143,17 +3138,6 @@ function fmtSize(n){
       return ms.length > 1 ? "[" + (i + 1) + "번째 메일 · " + m.from + "]\n" + t : t;
     }).join("\n\n").slice(0, 14000);
   }
-  // 번역 결과의 [링크N]을 눌러 열 수 있는 링크로 바꿔 그린다
-  function fillWithLinks(node, text, links){
-    node.textContent = "";
-    String(text || "").split(/(\[링크\d+\])/).forEach(function(part){
-      var m = /^\[링크(\d+)\]$/.exec(part), url = m && links && links[Number(m[1]) - 1];
-      if (url && /^https?:\/\//i.test(url)){
-        var a = el("a", "trlink", "링크"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.title = url;
-        node.appendChild(a);
-      } else if (part) node.appendChild(document.createTextNode(part));
-    });
-  }
 
   // ---- AI (이 페이지에서 Claude를 부른다) ----
   var samplerP = null;
@@ -3176,19 +3160,111 @@ function fmtSize(n){
     o.foreign = letters > 40 && hangul < letters * 0.15;
     return o.foreign;
   }
+  // ---- 본문 안 번역 ----
+  // 메일 글자를 조각으로 나눠 번역하고(긴 메일도 끊기지 않게), 원래 모양 그대로 글자만 바꿔 끼운다.
+  // 번역은 '원문 조각 → 번역' 사전(o.trMap)으로 들고 있어서, 이미지를 나중에 열어도 그대로 다시 입힌다.
+  var TR_LETTER = /[A-Za-zÀ-ɏЀ-ӿ぀-ヿ一-鿿฀-๿]/;
+  function trKey(t){ return String(t).replace(/\s+/g, " ").trim(); }
+  function trNeeds(t){
+    t = trKey(t);
+    if (!t || !TR_LETTER.test(t) || /^https?:\/\/\S+$/i.test(t) || /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/.test(t)) return false;
+    return (t.match(/[가-힣]/g) || []).length < t.length * 0.3;
+  }
+  function trTextNodes(doc){
+    var out = [], root = doc.body || doc.documentElement;
+    if (!root) return out;
+    var w = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    for (var n = w.nextNode(); n; n = w.nextNode()){
+      var p = n.parentNode && n.parentNode.nodeName;
+      if (p === "SCRIPT" || p === "STYLE" || p === "NOSCRIPT" || p === "TITLE") continue;
+      if (trNeeds(n.nodeValue)) out.push(n);
+    }
+    return out;
+  }
+  // 지금 보이는 모양(원래 모양 / 글자만)에 맞춰 번역할 조각을 모은다
+  function trSegments(x, o){
+    var seen = {}, segs = [];
+    function add(t){ t = trKey(t); if (trNeeds(t) && !seen[t]){ seen[t] = 1; segs.push(t); } }
+    add(x.subject || "");
+    (o.msgs || []).forEach(function(m){
+      if (m.html && !o.textOnly){
+        try{ trTextNodes(new DOMParser().parseFromString(m.html, "text/html")).forEach(function(n){ add(n.nodeValue); }); }catch(e){}
+      } else String(m.body || "").split("\n").forEach(add);
+    });
+    return segs;
+  }
+  function trChunks(segs){
+    var out = [], cur = [], len = 0;
+    segs.forEach(function(s){
+      if (cur.length && (len + s.length > 2000 || cur.length >= 40)){ out.push(cur); cur = []; len = 0; }
+      cur.push(s); len += s.length;
+    });
+    if (cur.length) out.push(cur);
+    return out;
+  }
+  function trChunk(sm, segs, depth){
+    var prompt = "아래 JSON 배열은 이메일 한 통에서 차례대로 뽑은 글 조각입니다. 각 조각을 자연스러운 한국어로 번역해 주세요.\n" +
+      "- 결과는 같은 개수, 같은 순서의 JSON 문자열 배열 하나만 쓰세요. 설명이나 다른 말은 쓰지 마세요.\n" +
+      "- 한 문장이 링크나 굵은 글씨 때문에 여러 조각으로 나뉘어 있을 수 있어요. 차례대로 이어 읽었을 때 자연스러운 한국어가 되게 번역하세요.\n" +
+      "- 사람 이름·회사명·제품명·주소·금액·날짜·코드·메일 주소는 원문 그대로 두세요. 마크다운 기호는 쓰지 마세요.\n\n" +
+      JSON.stringify(segs);
+    return sm(prompt).then(function(r){
+      var t = String(r.text || ""), a = t.indexOf("["), b = t.lastIndexOf("]"), arr = null;
+      try{ if (a >= 0 && b > a) arr = JSON.parse(t.slice(a, b + 1)); }catch(e){}
+      if (!r.truncated && Array.isArray(arr) && arr.length === segs.length) return arr.map(function(v){ return String(v == null ? "" : v); });
+      // 답이 잘렸거나 개수가 안 맞으면 반씩 나눠 다시 번역한다
+      if (segs.length > 1 && depth < 4){
+        var h = Math.ceil(segs.length / 2);
+        return trChunk(sm, segs.slice(0, h), depth + 1).then(function(p){
+          return trChunk(sm, segs.slice(h), depth + 1).then(function(q){ return p.concat(q); });
+        });
+      }
+      if (segs.length === 1 && Array.isArray(arr) && arr.length) return [String(arr[0])];
+      throw {code: "bad_output"};
+    });
+  }
   function translate(x, o){
-    var links = [];
-    o.tr = {loading: true, links: links}; bump(x);
+    if (o.trBusy) return;
+    o.trOn = true; o.trErr = null; o.trMap = o.trMap || {}; o.trVer = o.trVer || 0;
+    var todo = trSegments(x, o).filter(function(s){ return !Object.prototype.hasOwnProperty.call(o.trMap, s); });
+    if (!todo.length){ bump(x); return; }
+    var chunks = trChunks(todo), next = 0;
+    o.trBusy = {done: 0, total: chunks.length}; bump(x);
     sampler().then(function(sm){
       if (!sm) throw {code: "not_granted"};
-      var prompt = "다음 이메일을 자연스러운 한국어로 번역해 주세요.\n" +
-        "형식: 첫 줄에 '제목: ' 뒤에 번역한 제목, 한 줄 띄우고 본문 번역.\n" +
-        "문단 나눔은 원문대로 두고, 이름·회사명·주소·금액·날짜·링크는 원문 그대로 두세요. 설명이나 덧붙이는 말 없이 번역만 쓰세요. 마크다운 기호는 쓰지 마세요.\n\n" +
-        "[링크1] 같은 표시는 고치지 말고 그 자리에 그대로 두세요.\n\n" +
-        "제목: " + x.subject + "\n\n" + plainOf(o, links);
-      return sm(prompt, {onText: function(ev){ o.tr.text = ev.text; if (o.tr.node) fillWithLinks(o.tr.node, ev.text, links); }});
-    }).then(function(r){ o.tr = {text: r.text.trim() + (r.truncated ? "\n\n… 메일이 길어 앞부분만 번역했어요." : ""), links: links}; bump(x); },
-            function(e){ o.tr = {error: aiError(e)}; bump(x); });
+      function worker(){
+        if (next >= chunks.length) return Promise.resolve();
+        var c = chunks[next++];
+        return trChunk(sm, c, 0).then(function(arr){
+          c.forEach(function(s, k){ if (arr[k]) o.trMap[s] = arr[k]; });
+          o.trBusy.done++; o.trVer++; bump(x);
+          return worker();
+        });
+      }
+      return Promise.all([worker(), worker()]);   // 두 조각씩 함께 번역한다
+    }).then(function(){ o.trBusy = null; bump(x); },
+            function(e){ o.trBusy = null; o.trErr = e && e.code === "bad_output" ? "번역 결과를 읽지 못했어요." : aiError(e); bump(x); });
+  }
+  function trHtml(m, o){
+    var src = m.htmlShown || m.html, c = m._tr;
+    if (c && c.src === src && c.ver === o.trVer) return c.out;
+    var out = src;
+    try{
+      var doc = new DOMParser().parseFromString(src, "text/html");
+      trTextNodes(doc).forEach(function(n){
+        var v = n.nodeValue, t = o.trMap[trKey(v)];
+        if (t != null) n.nodeValue = /^\s*/.exec(v)[0] + t + /\s*$/.exec(v)[0];
+      });
+      out = "<!doctype html>" + doc.documentElement.outerHTML;
+    }catch(e){}
+    m._tr = {src: src, ver: o.trVer, out: out};
+    return out;
+  }
+  function trText(t, o){
+    return String(t || "").split("\n").map(function(l){
+      var v = o.trMap[trKey(l)];
+      return v != null ? /^\s*/.exec(l)[0] + v : l;
+    }).join("\n");
   }
 
   function summarize(x, o){
