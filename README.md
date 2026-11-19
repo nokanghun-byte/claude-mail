@@ -28,7 +28,8 @@ Claude 아티팩트(페이지)와 내 PC에서 돌아가는 작은 도우미 서
 - 답장 / 전체답장 / 전달 / 새 메일, 끌어다 놓기 첨부, Gmail 주소록, 명함 서명
 - 16MB가 넘는 첨부파일은 Google Drive에 올려 링크로 보내기
 - 읽음·안읽음, 별표, 이동, 스팸, 여러 통 한꺼번에 처리
-- 검색, 기간 지정, 더 불러오기, 새 메일 알림
+- 검색, 기간 지정, 더 불러오기
+- 새 메일 알림: 페이지 안 알림에 더해, **메일 페이지를 닫아 두어도** Claude 앱이 켜져 있으면 윈도우·맥 알림으로 알려 줍니다(IMAP 계정, 기본 3분 간격)
 - Claude로 요약 · 할 일 뽑기 · 답장 초안 · 번역
 - 모바일에서 왼쪽으로 밀어 삭제
 
@@ -58,6 +59,8 @@ IMAP 연결은 오픈소스 [imap-mcp-server](https://www.npmjs.com/package/imap
 5. Claude 설정 → 커넥터에서 **Gmail**, **Google Drive**를 연결합니다.
 
 워드·엑셀·파워포인트 첨부 미리보기, 큰 첨부파일 Drive 업로드(페이지의 **'Google Drive 연결하기'**)까지 확장 프로그램에 들어 있습니다. Windows와 macOS를 지원합니다.
+
+**새 메일 알림 설정:** 설정 → 확장 프로그램 → Claude Mail → 설정에서 켜고 끄거나 확인 간격(분)을 바꿀 수 있습니다. Gmail도 알림을 받으려면 Gmail을 IMAP 계정(앱 비밀번호)으로도 등록하세요. 확장 프로그램은 Claude의 Gmail 커넥터를 쓸 수 없기 때문입니다.
 
 **직접 설정하는 방법 (개발자용)**
 
@@ -104,7 +107,8 @@ It consists of a Claude artifact (the page) and a small helper server running on
 - Reply / Reply all / Forward / New mail, drag-and-drop attachments, Gmail contacts, business-card signature
 - Attachments over 16 MB are uploaded to Google Drive and sent as a link
 - Read/unread, star, move, spam, bulk actions
-- Search, date ranges, load more, new-mail notifications
+- Search, date ranges, load more
+- New-mail notifications: in-page alerts, plus desktop (Windows/macOS) notifications **even when the page is closed**, as long as the Claude app is running (IMAP accounts, every 3 minutes by default)
 - Claude-powered summary, to-do extraction, reply drafts, translation
 - Swipe left to delete on mobile
 
@@ -134,6 +138,8 @@ IMAP access uses the open-source [imap-mcp-server](https://www.npmjs.com/package
 5. In Claude settings → Connectors, connect **Gmail** and **Google Drive**.
 
 Word/Excel/PowerPoint previews and large-attachment uploads to Drive (**'Google Drive 연결하기'** in the page) are built in. Windows and macOS are supported.
+
+**New-mail notifications:** turn them on/off or change the check interval in Settings → Extensions → Claude Mail → Configure. To get Gmail notifications too, also add Gmail as an IMAP account (with an app password), since the extension cannot use Claude's Gmail connector.
 
 **Manual setup (for developers)**
 

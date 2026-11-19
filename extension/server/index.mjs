@@ -2,6 +2,7 @@
 //   - imap-core.mjs   : imap-mcp-server를 모듈로 불러와 메모리 안에서 연결
 //   - attachments.js  : 첨부파일 읽기, 외부 이미지, 큰 파일 조각 받기, Google Drive 업로드(drive.js / rclone)
 //   - extras.mjs      : 계정 등록 화면, 문서 변환, 메일 페이지
+//   - notify.mjs      : 메일 페이지를 닫아 두어도 새 메일을 운영체제 알림으로 알려 줌
 // Claude 앱의 내장 Node.js는 하위 Node 프로세스를 띄울 수 없으므로 모두 이 프로세스 안에서 돈다.
 
 import { createRequire } from "module";
@@ -9,7 +10,7 @@ import { appendFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-const VERSION = "1.1.2";
+const VERSION = "1.2.0";
 const require = createRequire(import.meta.url);
 const DEBUG_FILE = join(tmpdir(), "claude-mail-debug.log");
 function log(...a){
@@ -63,6 +64,7 @@ function startImap(){ if (imapReady) return imapReady; imapReady = (async () => 
 })(); imapReady.catch(e => log("imap failed:", e && e.stack || e)); return imapReady; }
 
 const LONG = { timeout: 10 * 60 * 1000 };
+let notifierStarted = false;
 let attNames = null, extraNames = null;
 async function listAll(){
   const E = await ex();
@@ -88,6 +90,10 @@ async function handle(msg){
       serverInfo: { name: "claude-mail", version: VERSION }
     } });
     setTimeout(startImap, 0);
+    if (!notifierStarted){
+      notifierStarted = true;
+      import("./notify.mjs").then(N => N.startNotifier(startImap, log)).catch(e => log("notify load failed:", e && e.message));
+    }
     return;
   }
   if (id == null) return;   // 알림은 무시
