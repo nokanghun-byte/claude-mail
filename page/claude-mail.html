@@ -1760,6 +1760,18 @@ function fmtSize(n){
                  !(n.nodeName.toLowerCase() === "image" ? /^(data:|#)/i : /^(data:image\/|#)/i).test(v)) n.removeAttribute(at.name);
       });
     });
+    // rhwp 0.8.x는 글자 뒤에 까는 그림(워터마크)의 '밝기·대비'를 거꾸로 적용해 진하게 그린다 (0.9.0에서 고쳐짐).
+    // 글자 뒤 그림에 걸린 대비 강화 필터는 한글 워터마크처럼 옅게 바꾼다.
+    Array.prototype.slice.call(root.querySelectorAll("filter[id^='rhwp-img-bc-']")).forEach(function(f){
+      var m = /-b(-?\d+)c(-?\d+)$/.exec(f.id);
+      if (!m || +m[2] <= 0) return;
+      var users = root.querySelectorAll("g[filter='url(#" + f.id + ")']"), behind = false;
+      Array.prototype.forEach.call(users, function(g){
+        for (var p = g; p && p !== root; p = p.parentNode) if (/behindText/.test(p.getAttribute && p.getAttribute("clip-path") || "")) behind = true;
+      });
+      if (!behind) return;
+      Array.prototype.forEach.call(f.querySelectorAll("feFuncR, feFuncG, feFuncB"), function(fn){ fn.setAttribute("slope", "0.38"); fn.setAttribute("intercept", "0.62"); });
+    });
     // 읽기 창 너비에 맞게 줄어들도록: viewBox를 두고 고정 크기를 뗀다
     if (!root.getAttribute("viewBox")){
       var w = parseFloat(root.getAttribute("width")), h = parseFloat(root.getAttribute("height"));

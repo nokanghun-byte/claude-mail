@@ -381,14 +381,15 @@ function fail(id, code, message){ send({ jsonrpc: "2.0", id, error: { code, mess
 function toolError(id, text){ reply(id, { content: [{ type: "text", text }], isError: true }); }
 
 // 페이지가 직접 받지 못하는 라이브러리 파일을 대신 받아 조각으로 넘긴다 (허용 목록에 있는 주소만)
-const LIB_ALLOW = ["https://cdn.jsdelivr.net/npm/@rhwp/core@0.8.7/rhwp_bg.wasm"];
+// rhwp 본체 파일만 (버전 숫자만 바뀔 수 있다)
+const LIB_ALLOW_RE = /^https:\/\/cdn\.jsdelivr\.net\/npm\/@rhwp\/core@\d{1,3}\.\d{1,3}\.\d{1,3}\/rhwp_bg\.wasm$/;
 const LIB_PART = 384 * 1024;   // 3의 배수
 const libCache = new Map();    // url -> {buf, at}
 let libLoading = new Map();
 async function fetchLib(id, args){
   const url = String(args && args.url || "");
   const part = Number.isInteger(args && args.part) ? args.part : 0;
-  if (LIB_ALLOW.indexOf(url) === -1) return toolError(id, "this address is not on the allow list");
+  if (!LIB_ALLOW_RE.test(url)) return toolError(id, "this address is not on the allow list");
   try {
     for (const [k, v] of libCache) if (Date.now() - v.at > 10 * 60 * 1000) libCache.delete(k);
     if (!libCache.has(url)){
