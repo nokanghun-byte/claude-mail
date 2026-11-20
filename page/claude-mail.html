@@ -821,7 +821,7 @@ function fmtSize(n){
 /*PURE-END*/
 
 (function(){
-  var state = {account:"gmail", range:"all", unreadOnly:false, cat:"all", box:"inbox"};
+  var state = {account:"all", range:"all", unreadOnly:false, cat:"all", box:"inbox"};
   state.q = "";   // 검색어 (저장하지 않는다)
   function keyOf(acc){ return acc + "|" + state.box + "|" + (state.q ? "q:" + state.q : state.box === "trash" ? "all" : state.range); }
   var SEARCH_SINCE_DAYS = 365;   // 검색은 최근 1년 안에서
@@ -935,14 +935,15 @@ function fmtSize(n){
   try{
     var saved = JSON.parse(localStorage.getItem("mailview") || "null");
     if (saved){
-      if (ACC[saved.account]) state.account = saved.account;
-      if (saved.rv === 2 && ["all","today","yesterday","week","month"].indexOf(saved.range) !== -1) state.range = saved.range;
+      // 예전에는 늘 Gmail로 시작해서 저장값이 Gmail로 굳어 있다 → 한 번은 전체 메일함으로 시작한다
+      if (saved.rv >= 3 && ACC[saved.account]) state.account = saved.account;
+      if (saved.rv >= 2 &&["all","today","yesterday","week","month"].indexOf(saved.range) !== -1) state.range = saved.range;
       state.unreadOnly = !!saved.unreadOnly;
       if (["sent", "inbox", "drafts", "trash"].indexOf(saved.box) !== -1) state.box = saved.box;
       if (saved.cat === "all" || CATS.some(function(c){ return c.key === saved.cat; })) state.cat = saved.cat;
     }
   }catch(e){}
-  function persist(){ try{ localStorage.setItem("mailview", JSON.stringify(Object.assign({rv: 2}, state))); }catch(e){} }
+  function persist(){ try{ localStorage.setItem("mailview", JSON.stringify(Object.assign({rv: 3}, state))); }catch(e){} }
 
   var $ = function(id){ return document.getElementById(id); };
   function el(tag, cls, text){
@@ -1201,6 +1202,23 @@ function fmtSize(n){
       var denied = e && ["needs_reauth","server_not_connected","blocked_by_policy","approval_required","not_in_manifest","consent_required"].indexOf(e.code) !== -1;
       store[key] = {error: e || {code:"upstream_error"}, items: denied ? null : (store[key] && store[key].items) || null, at: store[key] && store[key].at};
     }).then(function(){ if (seq === loadSeq || key !== keyOf(state.account)) render(); else render(); });
+  }
+
+  // 지금 보고 있지 않은 계정의 받은메일함을 뒤에서 미리 읽어 둔다 (화면은 그대로, 왼쪽 개수만 갱신)
+  function prefetch(acc){
+    if (!mcp || !mcpReady || acc === state.account) return;
+    var key = acc + "|inbox|" + state.range;
+    if (store[key] && (store[key].loading || store[key].items)) return;
+    store[key] = {loading: true, items: null};
+    var range = state.range;
+    loadMul = 1;
+    var p = acc === "gmail" ? fetchGmail(range, false, false) : fetchImap(acc, range, false, false);
+    p.then(function(res){
+      res.items.sort(function(a, b){ return b.dateMs - a.dateMs; });
+      store[key] = res;
+      if (acc !== "gmail") imapOk[acc] = true;
+    }).catch(function(e){ delete store[key]; })   // 실패하면 메뉴를 눌렀을 때 다시 읽는다
+      .then(function(){ render(); });
   }
 
   // 읽음 처리는 쓰기 작업이라 자동으로 다시 시도하지 않는다. 실패하면 버튼으로만 다시 시도한다.
@@ -3073,7 +3091,9 @@ function fmtSize(n){
         if (x.unread){ var ud = el("span", "udot"); ud.title = "안 읽음"; ud.setAttribute("aria-label", "안 읽음"); t1.appendChild(ud); }
         else if (!x.sent && !x.isDraft) t1.appendChild(el("span", "rdot", "읽음"));
         if (x.starred){ var stv = el("span", "star on"); stv.innerHTML = ICON.star; stv.setAttribute("aria-label", "별표"); t1.appendChild(stv); }
-        t1.appendChild(el("span", "mtime", fmtTime(x.dateMs, !dayLines && (wide || state.range === "month" || !!state.q || x.isDraft))));
+        // 메일마다 받은 날짜와 시간을 함께 보여 준다 (예: 11/20(금) 10:54)
+        var mt = el("span", "mtime", fmtTime(x.dateMs, true)); mt.title = fmtFull(x.dateMs);
+        t1.appendChild(mt);
         mm.appendChild(t1);
         mm.appendChild(el("span", "msubj", x.subject));
         if (x.snippet) mm.appendChild(el("span", "msnip", x.snippet));
@@ -3766,10 +3786,12 @@ function fmtSize(n){
     mcp = ns || null;
     return resolveHosts().then(function(){ mcpReady = true; return ns; });
   }).then(function(ns){
-    // 카카오·네이버가 마지막 선택이었어도 첫 화면은 Gmail로 연다. PC 확인 창이 페이지를 열자마자 뜨지 않게 하려는 것.
-    if (state.account !== "gmail"){ state.account = "gmail"; }
+    // 첫 화면은 마지막으로 보던 메일함(없으면 전체 메일함). 네이버·카카오도 시작하자마자 함께 불러온다.
+    if (state.account !== "all" && !ACC[state.account]) state.account = "all";
     load(false);
     if (mcp){
+      // 다른 계정 받은메일함도 뒤에서 미리 읽어 둔다 → 메뉴를 누르면 바로 보이고, 안 읽은 개수도 처음부터 보인다
+      setTimeout(function(){ ensureImapAccounts().then(function(){ ["gmail"].concat(imapNames()).forEach(prefetch); }).catch(function(){}); }, 1500);
       setTimeout(function(){ if (!known.gmail) poll("gmail"); }, 4000);
       // IMAP 계정도 처음에 한 번 읽어 두어야 그다음부터 새 메일을 알아챈다
       setTimeout(function(){ ensureImapAccounts().then(function(){ imapNames().forEach(function(a){ if (!known[a]) poll(a); }); }).catch(function(){}); }, 8000);
