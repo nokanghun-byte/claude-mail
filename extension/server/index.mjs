@@ -10,7 +10,7 @@ import { appendFileSync, rmdirSync } from "fs";
 import { tmpdir, homedir } from "os";
 import { join } from "path";
 
-const VERSION = "1.4.4";
+const VERSION = "1.4.5";
 const require = createRequire(import.meta.url);
 const DEBUG_FILE = join(tmpdir(), "claude-mail-debug.log");
 function log(...a){

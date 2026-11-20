@@ -61,7 +61,7 @@ IMAP 연결은 오픈소스 [imap-mcp-server](https://www.npmjs.com/package/imap
 
 워드·엑셀·파워포인트 첨부 미리보기, 큰 첨부파일 Drive 업로드(페이지의 **'Google Drive 연결하기'**)까지 확장 프로그램에 들어 있습니다. Windows와 macOS를 지원합니다.
 
-**새 메일 알림 설정:** 설정 → 확장 프로그램 → Claude Mail → 설정에서 켜고 끄거나 확인 간격(분)을 바꿀 수 있습니다. Gmail도 알림을 받으려면 Gmail을 IMAP 계정(앱 비밀번호)으로도 등록하세요. 확장 프로그램은 Claude의 Gmail 커넥터를 쓸 수 없기 때문입니다.
+**새 메일 알림 설정:** 설정 → 확장 프로그램 → Claude Mail → 설정에서 켜고 끄거나 확인 간격(분)을 바꿀 수 있습니다. **메일 페이지 주소**(예: `https://claude.ai/artifact/…`)를 넣어 두면 알림을 눌렀을 때 Claude 앱에서 메일 페이지가 바로 열립니다. Gmail도 알림을 받으려면 Gmail을 IMAP 계정(앱 비밀번호)으로도 등록하세요. 확장 프로그램은 Claude의 Gmail 커넥터를 쓸 수 없기 때문입니다.
 
 **직접 설정하는 방법 (개발자용)**
 
@@ -141,7 +141,7 @@ IMAP access uses the open-source [imap-mcp-server](https://www.npmjs.com/package
 
 Word/Excel/PowerPoint previews and large-attachment uploads to Drive (**'Google Drive 연결하기'** in the page) are built in. Windows and macOS are supported.
 
-**New-mail notifications:** turn them on/off or change the check interval in Settings → Extensions → Claude Mail → Configure. To get Gmail notifications too, also add Gmail as an IMAP account (with an app password), since the extension cannot use Claude's Gmail connector.
+**New-mail notifications:** turn them on/off or change the check interval in Settings → Extensions → Claude Mail → Configure. Enter your **mail page address** (e.g. `https://claude.ai/artifact/…`) there and clicking a notification opens the page in the Claude app. To get Gmail notifications too, also add Gmail as an IMAP account (with an app password), since the extension cannot use Claude's Gmail connector.
 
 **Manual setup (for developers)**
 

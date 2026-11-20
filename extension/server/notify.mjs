@@ -107,13 +107,32 @@ $w.add_MouseLeave({ $t.Start() })
 $w.FindName('Close').add_MouseLeftButtonUp({ param($s, $e) $e.Handled = $true; $t.Stop(); & $close })
 $w.FindName('Card').add_MouseLeftButtonUp({
   $t.Stop()
-  try { $p = Get-Process -Name 'Claude' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id) } } catch {}
+  # 메일 페이지 주소가 있으면 Claude 앱에서 그 페이지를 연다 (claude:// 링크). 없으면 Claude 창만 앞으로.
+  $opened = $false
+  if ($d.openIn -eq 'browser' -and $d.web -and ($d.web -match '^https://claude\.ai/(code/)?artifact/[A-Za-z0-9-]+$')) {
+    # 브라우저 새 창: Edge의 앱 창(주소창 없는 별도 창) → 안 되면 기본 브라우저
+    try { Start-Process 'msedge.exe' -ArgumentList ('--app=' + $d.web); $opened = $true } catch {}
+    if (-not $opened) { try { Start-Process $d.web; $opened = $true } catch {} }
+  }
+  if (-not $opened -and $d.url -and ($d.url -match '^claude://claude\.ai/(code/)?artifact/[A-Za-z0-9-]+$')) { try { Start-Process $d.url; $opened = $true } catch {} }
+  if (-not $opened) { try { $p = Get-Process -Name 'Claude' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id) } } catch {} }
   & $close
 })
 try { $snd = Join-Path $env:WINDIR 'Media\Windows Notify Email.wav'; if (Test-Path $snd) { (New-Object Media.SoundPlayer $snd).Play() } } catch {}
 $t.Start()
 [void]$w.ShowDialog()
 `;
+// 알림을 눌렀을 때 열 메일 페이지: 확장 프로그램 설정의 '메일 페이지 주소' → 없으면 ~/.claude-mail/config.json 의 mailPageUrl
+// https://claude.ai/artifact/… 를 Claude 앱이 여는 claude://claude.ai/artifact/… 로 바꾼다. 다른 주소는 쓰지 않는다.
+// 여는 방식: 설정의 '알림을 눌렀을 때 열 곳'(app | browser) → 없으면 config.json 의 openIn → 기본 app
+function readConfig(){ try { return JSON.parse(readFileSync(join(homedir(), ".claude-mail", "config.json"), "utf8")) || {}; } catch (e){ return {}; } }
+function setting(env, key){ const v = String(process.env[env] || "").trim(); return v && !/^\$\{/.test(v) ? v : String(readConfig()[key] || "").trim(); }
+function mailPageLink(){
+  const m = /^(?:https:\/\/|claude:\/\/)claude\.ai\/((?:code\/)?artifact\/[A-Za-z0-9-]+)\/?$/.exec(setting("CLAUDE_MAIL_PAGE_URL", "mailPageUrl"));
+  if (!m) return { url: "", web: "", openIn: "app" };
+  const openIn = /^(browser|브라우저)/i.test(setting("CLAUDE_MAIL_OPEN_IN", "openIn")) ? "browser" : "app";
+  return { url: "claude://claude.ai/" + m[1], web: "https://claude.ai/" + m[1], openIn };
+}
 const slots = [];   // 지금 떠 있는 알림 창 자리
 function popupWindows(info){
   let slot = 0; while (slots[slot]) slot++;
@@ -139,7 +158,7 @@ export async function showMailPopup(info){
   // 동그라미 글자: '(주)', '㈜', 따옴표 같은 걸 건너뛰고 첫 글자
   const nm = String(info.from || "").replace(/^\s*(\(주\)|㈜|\(유\)|\(사\))\s*/, "");
   const ch = (nm.match(/[0-9A-Za-zㄱ-ㆎ가-힣぀-ヿ一-鿿]/) || ["?"])[0];
-  const r = await popupWindows({ letter: ch.toUpperCase(), color: avColor(info.from), ...info });
+  const r = await popupWindows({ letter: ch.toUpperCase(), color: avColor(info.from), ...mailPageLink(), ...info });
   // 직접 그린 창이 안 뜨면 윈도우 알림으로라도 알린다
   return r.ok ? r : toastWindows(info.head, [info.from, info.subject]);
 }
