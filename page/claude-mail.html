@@ -1306,6 +1306,7 @@ function fmtSize(n){
   }
   function gmailTwinAtt(x, a){
     function norm(s){ return String(s || "").normalize ? String(s || "").normalize("NFC").trim() : String(s || "").trim(); }
+    if (gmailAttOff) return Promise.resolve(null);   // Gmail 첨부 받기가 안 되는 페이지면 바로 imap으로
     return gmailTwin(x).then(function(list){
       if (!list) return null;
       var hit = list.filter(function(g){ return norm(g.name) === norm(a.name); })[0];
@@ -1315,27 +1316,61 @@ function fmtSize(n){
     });
   }
 
+  // 'PC 도우미로 받기': 본인이 PC 도우미에 등록해 둔 Gmail IMAP 계정에서 같은 메일(보낸 사람·제목·날짜)을 찾아 첨부를 받는다
+  function gmailImapAtt(x, o, a){
+    var m = ((o && o.msgs) || []).filter(function(mm){ return mm.id === a.msgId; })[0] || {};
+    var addr = String(m.addr || "").trim(), subj = String(x.subject || "").trim();
+    var day = startOfDay(new Date(m.dateMs || x.dateMs || Date.now()));
+    function norm(s){ s = String(s || ""); return (s.normalize ? s.normalize("NFC") : s).replace(/\s+/g, " ").trim(); }
+    return mcp.callTool(HOST.imap, "imap_list_accounts", {}, {cache: false}).then(function(r){
+      var g = ((r.payload || {}).accounts || []).filter(function(ac){ return /(^|\.)(gmail|googlemail)\.com$/i.test(ac.host || ""); })[0];
+      if (!g) throw {code: "no_gmail_imap", message: "PC 도우미에 Gmail이 IMAP 계정으로 등록되어 있지 않아요. 페이지 왼쪽 '메일 계정 추가'에서 Gmail(앱 비밀번호)을 등록하면 쓸 수 있어요."};
+      var q = {accountName: g.name, since: ymd(addDays(day, -1), "-"), before: ymd(addDays(day, 2), "-"), searchAllFolders: true, limit: 30};
+      if (addr) q.from = addr;
+      return mcp.callTool(HOST.imap, "imap_search_emails", q, {cache: false}).then(function(r2){
+        var hit = ((r2.payload || {}).messages || []).filter(function(e){ return norm(e.subject) === norm(subj); })[0];
+        if (!hit) throw {code: "not_found", message: "PC 도우미의 Gmail 계정에서 같은 메일을 찾지 못했어요."};
+        return mcp.callTool(HOST.imap, "imap_download_attachment", {accountName: g.name, folder: hit.folder || "INBOX", uid: hit.uid, filename: a.name, extractText: true}, {cache: false});
+      });
+    });
+  }
+
   // 첨부 보기: 누르면 불러와서 창 안에 보여 주고, 다시 누르면 접는다
-  function toggleAtt(x, o, a){
+  // viaPc: 사용자가 'PC 도우미로 받기'를 눌렀을 때 — Gmail 첨부를 PC 도우미에 등록된 본인 Gmail IMAP 계정에서 받는다
+  function toggleAtt(x, o, a, viaPc){
     var st = o.atts[a.key];
-    if (st && !st.loading){ st.shown = !st.shown; render(); return; }
-    if (st) return;
+    if (!viaPc){
+      if (st && !st.loading){ st.shown = !st.shown; render(); return; }
+      if (st) return;
+    }
     o.atts[a.key] = {loading: true, shown: true}; render();
     var imapCall = function(){
       return mcp.callTool(HOST.imap, "imap_download_attachment", {accountName: x.acc, folder: x.folder, uid: x.uid, filename: a.name, extractText: true}, {cache: false});
     };
-    var call = x.acc
+    // Gmail 첨부: 이 페이지에서 Gmail 첨부 받기가 안 되면(사용자가 요청한 대로) 본인 Gmail IMAP 계정으로 바로 받는다.
+    // 받은 파일 위에 'PC 도우미(Gmail IMAP)로 받은 파일'이라고 표시한다.
+    var gmailCall = function(){
+      if (gmailAttOff) { viaPc = true; return gmailImapAtt(x, o, a); }
+      return mcp.callTool("Gmail", "download_gmail_attachment", {messageId: a.msgId, attachmentId: a.id, filename: a.name, mimeType: a.mime || undefined}, {cache: false})
+        .catch(function(e){
+          if (!(e && e.code === "blocked_by_policy")) throw e;
+          gmailAttOff = true; viaPc = true;
+          return gmailImapAtt(x, o, a).catch(function(e2){ throw (e2 && (e2.code === "no_gmail_imap" || e2.code === "not_found")) ? e2 : e; });
+        });
+    };
+    var call = viaPc ? gmailImapAtt(x, o, a)
+      : x.acc
       // 카카오·네이버: 같은 메일이 Gmail에도 들어와 있으면 거기서 원본 파일을 받는다 (없으면 imap으로)
       ? gmailTwinAtt(x, a).then(function(r){ return r || imapCall(); }, imapCall)
-      : mcp.callTool("Gmail", "download_gmail_attachment", {messageId: a.msgId, attachmentId: a.id, filename: a.name, mimeType: a.mime || undefined}, {cache: false});
+      : gmailCall();
     call.then(function(r){
       var got = attFromResult(r, a.mime);
-      var s = {shown: true, text: got.text, blob: got.blob};
+      var s = {shown: true, text: got.text, blob: got.blob, viaPc: !!viaPc};
       if (got.blob){ s.url = URL.createObjectURL(got.blob); return s; }
       s.blockTypes = ((r && r.content) || []).map(function(b){
         return (b && b.type) + (b && b.resource ? "/" + (b.resource.mimeType || "") + (b.resource.blob ? "+blob" : b.resource.text ? "+text" : "") : "");
       }).join(", ");
-      if (!x.acc) return s;
+      if (!x.acc && !viaPc) return s;
       // 카카오·네이버: 사진이 아니면 imap이 PC에 파일을 저장하고 경로만 알려 준다.
       // 그 파일을 PC의 markitdown으로 읽어 표·문단 형태로 보여 준다.
       var p = (r && r.payload && typeof r.payload === "object") ? r.payload : {};
@@ -1360,7 +1395,7 @@ function fmtSize(n){
     }).then(function(s){
       o.atts[a.key] = s;
     }).catch(function(e){
-      o.atts[a.key] = {shown: true, error: e || {code: "upstream_error"}};
+      o.atts[a.key] = {shown: true, error: e || {code: "upstream_error"}, viaPc: !!viaPc};
     }).then(render);
   }
   function saveAtt(a, s){
@@ -1613,10 +1648,19 @@ function fmtSize(n){
     v.appendChild(vh);
     if (s.saveMsg) v.appendChild(el("span", "cap", s.saveMsg));
     if (s.loading){ v.appendChild(el("span", "cap", "불러오는 중")); return v; }
+    if (s.viaPc && !s.error) v.appendChild(el("span", "cap", "PC 도우미(Gmail IMAP)로 받은 파일이에요."));
     if (s.error){
       var msg = errorText(s.error, x.acc || "gmail");
       if (s.error.code === "tool_error" && /12 ?MB|too large|large/i.test(s.error.message || "")) msg = "첨부파일이 너무 커서 여기서 열 수 없습니다. 메일 서비스에서 받아 주세요.";
+      if (s.error.code === "no_gmail_imap" || s.error.code === "not_found") msg = s.error.message;
+      else if (!x.acc && !s.viaPc && s.error.code === "blocked_by_policy") msg = "이 페이지에서는 Gmail 첨부 받기 기능을 쓸 수 없어요. 아래 'PC 도우미로 받기'를 누르거나 'Gmail에서 열기'로 보세요.";
       v.appendChild(el("span", "cap bad", msg));
+      // Gmail 첨부가 이 페이지에서 막히면, 본인이 고르면 PC 도우미(등록된 Gmail IMAP)로 받을 수 있다
+      if (!x.acc && !s.viaPc && s.error.code !== "no_gmail_imap" && s.error.code !== "not_found"){
+        var pb = btn("PC 도우미로 받기", "primary", function(){ toggleAtt(x, o, a, true); });
+        pb.title = "PC의 Claude Mail 도우미에 등록한 Gmail(IMAP) 계정에서 같은 메일을 찾아 첨부를 받아요";
+        v.appendChild(pb);
+      }
       return v;
     }
     // 미리보기는 한 번만 만들고, 화면을 다시 그릴 때는 만든 것을 그대로 옮겨 붙인다
@@ -2035,6 +2079,7 @@ function fmtSize(n){
   }
   var composerOpen = false;
   var blockedTools = {};   // 조직 정책으로 막힌 Gmail 기능 (이 창을 연 동안 기억)
+  var gmailAttOff = false; // 이 페이지에서 Gmail 첨부 받기가 안 되면 true → 이후엔 바로 PC 도우미(Gmail IMAP)로 받는다
 
   function buildComposer(x, o, mode, draft){
     var isNew = mode === "new" || mode === "draft", isFwd = mode === "fwd", isDraftMode = mode === "draft";
