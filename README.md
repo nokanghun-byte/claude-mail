@@ -30,7 +30,7 @@ Claude 아티팩트(페이지)와 내 PC에서 돌아가는 작은 도우미 서
 - 16MB가 넘는 첨부파일은 Google Drive에 올려 링크로 보내기
 - 읽음·안읽음, 별표, 이동, 스팸, 여러 통 한꺼번에 처리
 - 검색, 기간 지정, 더 불러오기
-- 새 메일 알림: 페이지 안 알림에 더해, **메일 페이지를 닫아 두어도** Claude 앱이 켜져 있으면 윈도우·맥 알림으로 알려 줍니다(IMAP 계정, 기본 3분 간격)
+- 새 메일 알림: 페이지 안 알림에 더해, **메일 페이지를 닫아 두어도** Claude 앱이 켜져 있으면 알려 줍니다. 윈도우는 화면 오른쪽 아래에 메일 페이지와 같은 모양의 작은 알림 창을 띄우고, 맥은 시스템 알림을 씁니다(IMAP 계정, 기본 3분 간격)
 - Claude로 요약 · 할 일 뽑기 · 답장 초안 · 번역
 - 모바일에서 왼쪽으로 밀어 삭제
 
@@ -110,7 +110,7 @@ It consists of a Claude artifact (the page) and a small helper server running on
 - Attachments over 16 MB are uploaded to Google Drive and sent as a link
 - Read/unread, star, move, spam, bulk actions
 - Search, date ranges, load more
-- New-mail notifications: in-page alerts, plus desktop (Windows/macOS) notifications **even when the page is closed**, as long as the Claude app is running (IMAP accounts, every 3 minutes by default)
+- New-mail notifications: in-page alerts, plus desktop alerts **even when the page is closed**, as long as the Claude app is running. On Windows a small card styled like the page pops up at the bottom-right of the screen; macOS uses system notifications (IMAP accounts, every 3 minutes by default)
 - Claude-powered summary, to-do extraction, reply drafts, translation
 - Swipe left to delete on mobile
 

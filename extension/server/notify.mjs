@@ -51,6 +51,98 @@ function toastWindows(title, lines){
   const enc = Buffer.from(ps, "utf16le").toString("base64");
   return run("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", enc]);
 }
+// 윈도우: 메일 페이지 안 알림과 같은 모양의 작은 창을 화면 오른쪽 아래에 직접 띄운다 (알림 센터를 쓰지 않음).
+// 포커스를 빼앗지 않고, 8초 뒤 사라진다(마우스를 올리면 기다림). 누르면 Claude 창을 앞으로 가져온다.
+// 여러 통이면 위로 쌓는다(slot).
+const POPUP_SECONDS = 8;
+const AV_COLORS = ["#3182F6", "#00A661", "#7B61FF", "#F04452", "#FF8A00", "#00A3C4", "#E2489C", "#5B6B7F"];
+function avColor(name){ let h = 0; const n = String(name || "?"); for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
+const POPUP_PS = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Microsoft.VisualBasic
+$d = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__DATA__')) | ConvertFrom-Json
+$xaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+  ResizeMode="NoResize" Width="400" Height="98" Opacity="0" FontFamily="Pretendard, Malgun Gothic, Segoe UI">
+  <Border x:Name="Card" CornerRadius="14" Background="#F51E1F23" BorderBrush="#2EFFFFFF" BorderThickness="1" Padding="16,0,14,0" Margin="12,5,12,5" Height="88" Cursor="Hand">
+    <Border.Effect><DropShadowEffect BlurRadius="26" ShadowDepth="5" Direction="270" Opacity="0.45"/></Border.Effect>
+    <Grid VerticalAlignment="Center">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Border x:Name="AvBg" Width="40" Height="40" CornerRadius="20" VerticalAlignment="Top">
+        <TextBlock x:Name="Av" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Border>
+      <StackPanel Grid.Column="1" Margin="12,0,6,0">
+        <TextBlock x:Name="Head" FontSize="12" FontWeight="SemiBold" Foreground="#6AA6FF"/>
+        <TextBlock x:Name="Subj" FontSize="15" FontWeight="Bold" Foreground="#F4F5F7" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
+        <TextBlock x:Name="From" FontSize="13" Foreground="#A3A8B0" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+      </StackPanel>
+      <TextBlock x:Name="Close" Grid.Column="2" Text="&#x2715;" FontSize="12" Foreground="#80FFFFFF" VerticalAlignment="Top" Padding="4,0,2,4"/>
+    </Grid>
+  </Border>
+</Window>
+'@
+$w = [Windows.Markup.XamlReader]::Parse($xaml)
+$conv = New-Object Windows.Media.BrushConverter
+$w.FindName('Head').Text = $d.head
+$w.FindName('Subj').Text = $d.subject
+$w.FindName('From').Text = $d.from
+$w.FindName('Av').Text = $d.letter
+$w.FindName('Av').Foreground = $conv.ConvertFromString($d.color)
+$bg = $conv.ConvertFromString($d.color); $bg.Opacity = 0.22; $w.FindName('AvBg').Background = $bg
+$fade = { param($to, $done) $a = New-Object Windows.Media.Animation.DoubleAnimation($to, [TimeSpan]::FromMilliseconds(220)); if ($done) { $a.add_Completed($done) }; $w.BeginAnimation([Windows.Window]::OpacityProperty, $a) }
+$close = { & $fade 0 ([EventHandler]{ $w.Close() }) }
+$w.add_Loaded({
+  $wa = [Windows.SystemParameters]::WorkArea
+  # 창 높이 98 = 카드 88 + 위아래 여백 5씩 → 카드 사이 10px, 화면 아래·오른쪽과는 12px
+  $w.Left = $wa.Right - $w.Width
+  $w.Top = $wa.Bottom - 7 - $w.Height * ([int]$d.slot + 1)
+  & $fade 1 $null
+})
+$t = New-Object Windows.Threading.DispatcherTimer
+$t.Interval = [TimeSpan]::FromSeconds([int]$d.seconds)
+$t.add_Tick({ $t.Stop(); & $close })
+$w.add_MouseEnter({ $t.Stop() })
+$w.add_MouseLeave({ $t.Start() })
+$w.FindName('Close').add_MouseLeftButtonUp({ param($s, $e) $e.Handled = $true; $t.Stop(); & $close })
+$w.FindName('Card').add_MouseLeftButtonUp({
+  $t.Stop()
+  try { $p = Get-Process -Name 'Claude' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id) } } catch {}
+  & $close
+})
+try { $snd = Join-Path $env:WINDIR 'Media\Windows Notify Email.wav'; if (Test-Path $snd) { (New-Object Media.SoundPlayer $snd).Play() } } catch {}
+$t.Start()
+[void]$w.ShowDialog()
+`;
+const slots = [];   // 지금 떠 있는 알림 창 자리
+function popupWindows(info){
+  let slot = 0; while (slots[slot]) slot++;
+  slots[slot] = true;
+  const data = Buffer.from(JSON.stringify({ seconds: POPUP_SECONDS, slot, ...info }), "utf8").toString("base64");
+  const ps = POPUP_PS.replace("__DATA__", data);
+  const enc = Buffer.from(ps, "utf16le").toString("base64");
+  setTimeout(() => { slots[slot] = false; }, (POPUP_SECONDS + 2) * 1000);
+  // 창이 떠 있는 동안 기다리지 않는다 (다음 알림이 위로 쌓이게)
+  return new Promise((resolve) => {
+    try {
+      const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-EncodedCommand", enc], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+      let err = "";
+      p.stderr.on("data", d => { err += d; });
+      p.on("error", e => resolve({ ok: false, error: String(e && e.message || e) }));
+      p.on("close", code => { if (code !== 0) resolve({ ok: false, error: err.trim().slice(0, 500) || ("exit " + code) }); });
+      setTimeout(() => resolve({ ok: true }), 4000);   // 4초 안에 실패하지 않았으면 떴다고 본다
+    } catch (e){ resolve({ ok: false, error: String(e && e.message || e) }); }
+  });
+}
+export async function showMailPopup(info){
+  if (process.platform !== "win32") return showNotification(info.head, [info.from, info.subject]);
+  // 동그라미 글자: '(주)', '㈜', 따옴표 같은 걸 건너뛰고 첫 글자
+  const nm = String(info.from || "").replace(/^\s*(\(주\)|㈜|\(유\)|\(사\))\s*/, "");
+  const ch = (nm.match(/[0-9A-Za-zㄱ-ㆎ가-힣぀-ヿ一-鿿]/) || ["?"])[0];
+  const r = await popupWindows({ letter: ch.toUpperCase(), color: avColor(info.from), ...info });
+  // 직접 그린 창이 안 뜨면 윈도우 알림으로라도 알린다
+  return r.ok ? r : toastWindows(info.head, [info.from, info.subject]);
+}
 function toastMac(title, lines){
   const q = s => "\"" + String(s || "").replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
   const script = "display notification " + q(lines.slice(1).join(" · ")) + " with title " + q(title) + " subtitle " + q(lines[0] || "") + " sound name \"default\"";
@@ -73,6 +165,15 @@ export function showNotification(title, lines){
   return Promise.resolve({ ok: false, error: "unsupported platform" });
 }
 
+// 메일 페이지와 같은 계정 이름 (서버 주소로 정한다)
+const ACC_NAMES = [[/naver\.com$/, "네이버"], [/worksmobile\.com$/, "네이버웍스"], [/kakao\.com$/, "카카오"], [/daum\.net$/, "다음"],
+  [/(outlook|office365|hotmail|live)\.com$/, "아웃룩"], [/nate\.com$/, "네이트"], [/hiworks\.com$/, "하이웍스"], [/(gmail|googlemail)\.com$/, "Gmail"],
+  [/(icloud|me)\.com$/, "iCloud"], [/yahoo\.com$/, "Yahoo"]];
+function accountLabel(acc){
+  const host = String(acc && acc.host || "").toLowerCase();
+  for (const [re, name] of ACC_NAMES) if (re.test(host)) return name;
+  return (acc && (acc.name || acc.user)) || "메일";
+}
 function parse(r){
   try { return JSON.parse(((r && r.content) || []).map(c => c.text || "").join("")); } catch (e){ return null; }
 }
@@ -114,18 +215,18 @@ export function startNotifier(getClient, log){
                     .sort((a, b) => b.uid - a.uid);
     state[acc.id] = Math.max(last, maxUid);
     if (!fresh.length) return;
-    const label = acc.name || acc.user || "메일";
+    const label = accountLabel(acc);
     if (fresh.length > SHOW_EACH){
       const who = Array.from(new Set(fresh.map(m => senderName(m.from)))).slice(0, 3).join(", ");
-      await notify("새 메일 " + fresh.length + "통 · " + label, [short(who + " 외", 80)]);
+      await notify({ head: "새 메일 " + fresh.length + "통 · " + label, subject: short(fresh[0].subject || "(제목 없음)", 120), from: short(who + " 외", 80) });
     } else {
       for (const m of fresh.reverse()){
-        await notify("새 메일 · " + label, [short(senderName(m.from), 60), short(m.subject || "(제목 없음)", 120)]);
+        await notify({ head: "새 메일 · " + label, subject: short(m.subject || "(제목 없음)", 120), from: short(senderName(m.from), 60) });
       }
     }
   }
-  async function notify(title, lines){
-    const r = await showNotification(title, lines);
+  async function notify(info){
+    const r = await showMailPopup(info);
     if (!r.ok) log("notify: 알림 표시 실패: " + r.error);
   }
 

@@ -2578,20 +2578,94 @@ function fmtSize(n){
     if (m.html && m.html.indexOf("cid:" + a.cid) !== -1) return true;
     return /^image\//.test(a.mime || "") && !/\.[a-z0-9]{2,5}$/i.test(a.name || "");   // 이름 없는 작은 본문 그림
   }
+  // 그림 한 장 받기: 새 도우미는 48KB씩 텍스트 조각으로 보내 준다 (큰 그림이 Claude 앱에서 페이지로 넘어오다 빠지지 않게).
+  // 조각을 모르는 예전 도우미면 예전 방식(그림 한 덩어리)으로 받는다.
+  function partOf(r){
+    var bs = (r && r.content) || [];
+    for (var i = 0; i < bs.length; i++){
+      var b = bs[i] || {};
+      if (b.type === "text" && typeof b.text === "string" && b.text.charAt(0) === "{"){
+        try { var p = JSON.parse(b.text); if (p && typeof p.data === "string" && p.parts) return p; } catch(e){}
+      }
+    }
+    var pl = r && r.payload;
+    return pl && typeof pl.data === "string" && pl.parts ? pl : null;
+  }
+  // PC 도우미 호출 한도(rate_limited)에 걸리지 않게: 호출 사이를 조금 띄우고, 걸리면 모두 잠깐 쉬었다가 다시 부른다
+  var imgGate = {next: 0, pauseUntil: 0};
+  function imgCall(args, tries){
+    tries = tries || 0;
+    var now = Date.now(), at = Math.max(now, imgGate.next, imgGate.pauseUntil);
+    imgGate.next = at + 150;
+    return sleep(at - now).then(function(){
+      return mcp.callTool(HOST.att, "fetch_image", args, {cache: false});
+    }).catch(function(e){
+      var limited = e && (e.code === "rate_limited" || /rate limit/i.test(String(e.message || "")));
+      if (!limited || tries >= 6) throw e;
+      var wait = 2000 * (tries + 1);
+      imgGate.pauseUntil = Math.max(imgGate.pauseUntil, Date.now() + wait);
+      return imgCall(args, tries + 1);
+    });
+  }
+  // 조각 크기: 처음엔 크게(256KB) 받아 호출 수를 줄인다. 큰 조각이 중간에 빠지거나 거절되면 48KB로 내려 다시 받는다.
+  // imgPartKB가 0이면 조각 크기를 고를 수 없는 도우미(1.3.7)라서 기본 48KB로 받는다.
+  var imgPartKB = 256, imgMemo = {}, imgMemoN = 0;
+  function fetchImageData(url){
+    if (imgMemo[url]) return Promise.resolve(imgMemo[url]);   // 한 번 받은 그림은 다시 받지 않는다
+    return fetchImageParts(url, imgPartKB).then(function(d){
+      if (d){ if (imgMemoN > 300){ imgMemo = {}; imgMemoN = 0; } imgMemo[url] = d; imgMemoN++; }
+      return d;
+    });
+  }
+  function fetchImageParts(url, kb){
+    var legacy = function(){ return imgCall({url: url, as: "resource"}).then(dataUrlOf); };
+    var args = function(part){ var a = {url: url, part: part}; if (kb) a.partKB = kb; return a; };
+    var smaller = function(){
+      if (!kb || kb === 48) return null;
+      if (kb) imgPartKB = 48;   // 큰 조각이 안 되면 이후 그림도 작은 조각으로
+      return fetchImageParts(url, 48);
+    };
+    return imgCall(args(0)).then(function(r){
+      var p0 = partOf(r);
+      if (!p0) return dataUrlOf(r) || smaller() || legacy();
+      var datas = [p0.data], k = 1;
+      function next(){
+        if (k >= p0.parts) return "data:" + p0.mimeType + ";base64," + datas.join("");
+        var idx = k++;
+        return imgCall(args(idx)).then(function(r2){
+          var p = partOf(r2);
+          if (!p || p.part !== idx) throw {code: "bad_part", message: "그림 조각 " + idx + "을 받지 못했어요"};
+          datas.push(p.data); return next();
+        });
+      }
+      return Promise.resolve().then(next).catch(function(e){ var s = smaller(); if (s && e && e.code !== "rate_limited") return s; throw e; });
+    }, function(e){
+      var msg = String(e && e.message || "");
+      // 조각 크기를 모르는 도우미(1.3.7): partKB 없이 다시
+      if (kb && kb !== 48 && /partKB|additional/i.test(msg)){ imgPartKB = 0; return fetchImageParts(url, 0); }
+      // 더 예전 도우미는 part 자체를 모른다
+      if (/part|argument|schema|additional|invalid/i.test(msg)) return legacy();
+      throw e;
+    });
+  }
   // 바깥 그림: PC 첨부 도우미로 받아 데이터로 바꿔 넣는다 (claude.ai 안에서는 바깥 주소 그림을 직접 못 연다)
   function loadRemoteImages(x, o){
     var jobs = [];
     o.msgs.forEach(function(m){ if (m.html) remoteImgSrcs(m.htmlShown || m.html).slice(0, 40).forEach(function(raw){ jobs.push({m: m, raw: raw}); }); });
     if (!jobs.length){ bump(x); return; }
-    var done = 0, ok = 0, firstErr = null, i = 0;
+    var done = 0, ok = 0, skipped = 0, firstErr = null, i = 0;
     o.imgMsg = "그림을 불러오는 중… 0/" + jobs.length; o.imgBad = false; bump(x);
     function worker(){
       if (i >= jobs.length) return Promise.resolve();
       var j = jobs[i++];
-      return mcp.callTool(HOST.att, "fetch_image", {url: unescAttr(j.raw), as: "resource"}, {cache: false}).then(function(r){
-        var d = dataUrlOf(r);
+      return fetchImageData(unescAttr(j.raw)).then(function(d){
         if (d){ j.m.htmlShown = replaceSrc(j.m.htmlShown || j.m.html, j.raw, d); ok++; }
-      }, function(e){ if (!firstErr) firstErr = e || {code: "upstream_error"}; }).then(function(){
+        else if (!firstErr) firstErr = {code: "no_data"};
+      }, function(e){
+        // 원래 주소에 그림이 없는 경우(그림 대신 웹페이지, 지워진 그림, 열람 확인용 주소)는 실패로 세지 않는다
+        if (/not an image|server answered 4\d\d|private network|local addresses/i.test(String(e && e.message || ""))){ skipped++; return; }
+        if (!firstErr) firstErr = e || {code: "upstream_error"};
+      }).then(function(){
         done++;
         o.imgMsg = "그림을 불러오는 중… " + done + "/" + jobs.length;
         if (done % 4 === 0) o.imgVer = (o.imgVer || 0) + 1;
@@ -2599,13 +2673,13 @@ function fmtSize(n){
         return worker();
       });
     }
-    Promise.all([worker(), worker(), worker(), worker()]).then(function(){
+    Promise.all([worker(), worker()]).then(function(){
       o.imgVer = (o.imgVer || 0) + 1;
-      if (ok === jobs.length) o.imgMsg = "";
+      if (ok + skipped === jobs.length) o.imgMsg = "";
       else if (!ok && firstErr && (firstErr.code === "not_in_manifest" || firstErr.code === "server_not_connected" || firstErr.code === "tool_error" && /unknown tool/i.test(firstErr.message || ""))){
         o.imgMsg = "바깥 그림을 보려면 PC의 첨부 도우미 새 버전이 필요해요. Claude 앱을 다시 시작해 주세요."; o.imgBad = true;
       } else {
-        o.imgMsg = (jobs.length - ok) + "개 그림은 불러오지 못했어요." + (firstErr && firstErr.code === "cancelled" ? " (PC에서 허용하지 않음)" : ""); o.imgBad = !ok;
+        o.imgMsg = (jobs.length - ok - skipped) + "개 그림은 불러오지 못했어요." + (firstErr && firstErr.code === "cancelled" ? " (PC에서 허용하지 않음)" : firstErr ? " (" + (firstErr.code || "오류") + (firstErr.message ? ": " + String(firstErr.message).slice(0, 80) : "") + ")" : ""); o.imgBad = !ok;
       }
       bump(x);
     });

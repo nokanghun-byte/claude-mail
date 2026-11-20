@@ -41,7 +41,9 @@ const TOOLS = [{
     type: "object",
     properties: {
       url: { type: "string", description: "The http(s) address of the image." },
-      as: { type: "string", enum: ["image", "resource"], description: "Optional. \"resource\" returns the bytes as an embedded resource blob instead of an image block (large images can be dropped from image blocks on the way to a page)." }
+      as: { type: "string", enum: ["image", "resource"], description: "Optional. \"resource\" returns the bytes as an embedded resource blob instead of an image block (large images can be dropped from image blocks on the way to a page)." },
+      part: { type: "integer", minimum: 0, description: "Optional. Return the image as text in 48 KB pieces: JSON {mimeType, size, parts, part, data} where data is the base64 of piece number `part` (0-based). Ask for part 0 first, then 1..parts-1. Pieces are kept for 2 minutes." },
+      partKB: { type: "integer", minimum: 16, maximum: 2048, description: "Optional piece size in KB for `part` (default 48). Use the same value for every piece of one image." }
     },
     required: ["url"],
     additionalProperties: false
@@ -306,9 +308,28 @@ async function checkPublic(u){
   const addrs = net.isIP(host) ? [{address: host}] : await dns.lookup(host, {all: true});
   if (!addrs.length || addrs.some(a => isPrivateIp(a.address))) throw new Error("private network addresses are refused");
 }
+// 큰 그림은 Claude 앱에서 페이지로 넘어가는 길에 빠질 수 있어, 48KB씩 텍스트로 나눠 보낸다 (받은 그림은 2분 동안 기억)
+const IMG_PART = 48 * 1024;   // 3의 배수라 조각별 base64를 그대로 이어 붙일 수 있다
+const imgCache = new Map();   // url -> {buf, type, at}
+function partSizeOf(args){
+  const kb = Number(args && args.partKB);
+  if (!Number.isFinite(kb) || kb < 16) return IMG_PART;
+  return Math.floor(Math.min(kb, 2048) * 1024 / 3) * 3;   // 3의 배수
+}
+function partReply(id, buf, type, part, size){
+  size = size || IMG_PART;
+  const parts = Math.max(1, Math.ceil(buf.length / size));
+  if (part >= parts) return toolError(id, "no such part");
+  const data = buf.subarray(part * size, (part + 1) * size).toString("base64");
+  reply(id, { content: [{ type: "text", text: JSON.stringify({ mimeType: type, size: buf.length, parts, part, data }) }] });
+}
 async function fetchImage(id, args){
   let u;
   try { u = new URL(String(args && args.url || "")); } catch (e){ return toolError(id, "not a valid address"); }
+  const wantPart = args && Number.isInteger(args.part) && args.part >= 0 ? args.part : null;
+  const now = Date.now();
+  for (const [k, v] of imgCache) if (now - v.at > 120000) imgCache.delete(k);
+  if (wantPart !== null && imgCache.has(u.href)){ const c = imgCache.get(u.href); return partReply(id, c.buf, c.type, wantPart, partSizeOf(args)); }
   try {
     // 넘겨주기(redirect)도 한 단계씩 확인한다
     let res, hops = 0;
@@ -327,6 +348,7 @@ async function fetchImage(id, args){
     if (len > IMG_MAX) return toolError(id, "image too large");
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > IMG_MAX) return toolError(id, "image too large");
+    if (wantPart !== null){ imgCache.set(u.href, {buf, type, at: Date.now()}); return partReply(id, buf, type, wantPart, partSizeOf(args)); }
     const b64 = buf.toString("base64");
     if (args && args.as === "resource") return reply(id, { content: [{ type: "resource", resource: { uri: "mail-image:" + u.hostname + "/" + buf.length, mimeType: type, blob: b64 } }] });
     reply(id, { content: [{ type: "image", data: b64, mimeType: type }] });
