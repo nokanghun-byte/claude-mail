@@ -69,6 +69,17 @@ async function fixBrokenSubjects(client, list) {
 
 // src/utils/client-side-search.ts`);
 if (!s.includes("async function fixBrokenSubjects")) throw new Error("제목 고치기 함수를 넣지 못했어요");
+// 첨부를 저장 위치(savePath)에 저장할 때 같은 이름의 파일이 있으면 덮어쓰지 않고 '이름 (1).확장자'로 저장한다
+for (const [fsv, pv, tv] of [["fs3", "path3", "targetPath2"], ["fs2", "path2", "targetPath"]]) {
+  const from = `    const ${tv} = savePath || ${pv}.join(DOWNLOAD_DIR, ${pv}.basename(resolvedFilename));`;
+  const n = s.split(from).length - 1;
+  if (n !== 1) throw new Error("첨부 저장 위치 코드를 못 찾았어요: " + tv + " (" + n + ")");
+  s = s.replace(from, `    let ${tv} = savePath || ${pv}.join(DOWNLOAD_DIR, ${pv}.basename(resolvedFilename));
+    if (savePath && ${fsv}.existsSync(${tv})) {
+      const ext0 = ${pv}.extname(${tv}), stem0 = ext0 ? ${tv}.slice(0, -ext0.length) : ${tv};
+      for (let k = 1; k < 1000; k++) { const c = stem0 + " (" + k + ")" + ext0; if (!${fsv}.existsSync(c)) { ${tv} = c; break; } }
+    }`);
+}
 // 확장 프로그램의 임시보관 정리 도구(extras.mjs)가 쓰도록 내부 객체도 내보낸다
 if (!s.includes("\nexport { server };")) throw new Error("imap-core export 구조가 바뀌었어요");
 s = s.replace("\nexport { server };", "\nexport { server, imapService, accountManager };");

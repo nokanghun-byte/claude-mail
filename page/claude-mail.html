@@ -336,6 +336,7 @@ a{color:inherit}
 .attview .vh{display:flex;align-items:center;gap:8px;width:100%}
 .attview .vh b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attbody{width:100%;display:flex;flex-direction:column;gap:8px}
+.hwpview{overflow:auto;max-height:80vh;padding:8px;border-radius:10px;background:#E9ECF0;color:#111}
 .attview img{max-width:100%;height:auto;border-radius:8px;background:#FFFFFF}
 .attview pre{margin:0;max-height:60vh;overflow:auto;white-space:pre-wrap;font-family:inherit;font-size:13.5px;width:100%;background:var(--surface2);border-radius:10px;padding:12px}
 .cap{font-size:12.5px;color:var(--faint);overflow-wrap:anywhere}
@@ -993,7 +994,7 @@ function fmtSize(n){
     if (tool === "untrash_thread") p = p.then(function(){ return mcp.callTool("Gmail", "label_message", {messageId: x.mid, labelIds: ["INBOX"]}, {cache: false}); });
     return p;
   }
-  function fetchGmail(range, fresh, sent, q){
+  function fetchGmail(range, fresh, sent, q, onPage){
     var b = rangeBounds(range, new Date(), loadMul);
     if (q) b = {from: addDays(startOfDay(new Date()), -SEARCH_SINCE_DAYS), to: addDays(startOfDay(new Date()), 1)};
     var query = q ? q + (sent ? " in:sent" : " -in:sent") + " -in:drafts newer_than:1y" : sent ? "in:sent after:" + ymd(addDays(b.from, -1), "/") : "after:" + ymd(addDays(b.from, -1), "/") + " -in:sent -in:drafts";
@@ -1010,6 +1011,7 @@ function fmtSize(n){
             if (inRange(it.dateMs, b)){ it.snippet = decode(it.snippet); it.subject = decode(it.subject); items.push(it); }
           });
         }
+        if (onPage && p.nextPageToken) onPage(items.slice());
         pages++;
         if (p.nextPageToken && pages < (q ? 2 : 6) * loadMul) return page(p.nextPageToken);
         return {items: items, at: storedAt || Date.now(), more: !!p.nextPageToken};
@@ -1157,15 +1159,31 @@ function fmtSize(n){
     });
   }
 
-  function fetchAll(range, fresh, sent, q){
-    return ensureImapAccounts().then(function(){ return fetchAllNow(range, fresh, sent, q); });
+  function fetchAll(range, fresh, sent, q, onPart){
+    return ensureImapAccounts().then(function(){ return fetchAllNow(range, fresh, sent, q, onPart); });
   }
-  function fetchAllNow(range, fresh, sent, q){
-    var accs = ["gmail"].concat(imapNames());
+  function fetchAllNow(range, fresh, sent, q, onPart){
+    var accs = ["gmail"].concat(imapNames()), partial = {}, box = state.box;
+    function emit(){
+      if (!onPart) return;
+      var all = []; Object.keys(partial).forEach(function(k){ all = all.concat(partial[k]); });
+      onPart(all);
+    }
     return Promise.all(accs.map(function(a){
-      var p = state.box === "trash" ? fetchTrash(a, fresh, q) : a === "gmail" ? fetchGmail(range, fresh, sent, q) : fetchImap(a, range, fresh, sent, q);
-      return p.then(function(res){ return {acc: a, res: res}; }, function(e){ return {acc: a, err: e || {code: "upstream_error"}}; });
+      var p = box === "trash" ? fetchTrash(a, fresh, q)
+            : a === "gmail" ? fetchGmail(range, fresh, sent, q, function(its){ partial.gmail = its; emit(); })
+            : fetchImap(a, range, fresh, sent, q);
+      return p.then(function(res){ partial[a] = res.items; emit(); return {acc: a, res: res}; }, function(e){ return {acc: a, err: e || {code: "upstream_error"}}; });
     })).then(function(parts){
+      // 받은메일함을 다 받았으면 계정별 목록도 같이 채워 둔다 → 계정 메뉴를 누르면 바로 보이고, 따로 다시 받지 않는다
+      if (!q && box === "inbox" && (moreLv["all|inbox|" + range] || 1) === 1){
+        parts.forEach(function(pt){
+          var k = pt.acc + "|inbox|" + range;
+          if (pt.err || (store[k] && (store[k].items || store[k].loading))) return;
+          var its = pt.res.items.slice(); its.sort(function(a, b){ return b.dateMs - a.dateMs; });
+          store[k] = {items: its, at: pt.res.at, more: pt.res.more};
+        });
+      }
       var items = [], errs = {}, more = false, at = Date.now();
       parts.forEach(function(pt){
         if (pt.err){ errs[pt.acc] = pt.err; return; }
@@ -1189,9 +1207,17 @@ function fmtSize(n){
     var sentBox = state.box === "sent";
     var q = state.q;
     loadMul = moreLv[key] || 1;
-    var p = state.box === "drafts" ? fetchDrafts(fresh, q) : state.account === "all" ? fetchAll(state.range, fresh, sentBox, q)
+    // 먼저 받은 것부터 화면에 보여 준다 (다 받을 때까지 기다리지 않음)
+    var onPart = function(its){
+      var cur = store[key];
+      if (!cur || !cur.loading || !its.length) return;
+      if (cur.items && cur.items.length > its.length) return;   // 예전 목록이 더 많으면 다 받을 때까지 그대로 둔다
+      its.sort(function(a, b){ return b.dateMs - a.dateMs; });
+      cur.items = its; render();
+    };
+    var p = state.box === "drafts" ? fetchDrafts(fresh, q) : state.account === "all" ? fetchAll(state.range, fresh, sentBox, q, onPart)
           : state.box === "trash" ? fetchTrash(state.account, fresh, q)
-          : state.account === "gmail" ? fetchGmail(state.range, fresh, sentBox, q) : fetchImap(state.account, state.range, fresh, sentBox, q);
+          : state.account === "gmail" ? fetchGmail(state.range, fresh, sentBox, q, onPart) : fetchImap(state.account, state.range, fresh, sentBox, q);
     p.then(function(res){
       res.items.sort(function(a, b){ return b.dateMs - a.dateMs; });
       store[key] = res;
@@ -1235,8 +1261,12 @@ function fmtSize(n){
     }).catch(function(e){ x.markErr = e || {code: "upstream_error"}; })
       .then(function(){ x.marking = false; render(); });
   }
-  function toggle(x){
-    if (open[x.id] && !open[x.id].error){ render(); return; }   // 이미 불러온 메일은 다시 불러오지 않는다
+  function toggle(x, quiet){
+    if (open[x.id] && !open[x.id].error){   // 이미 불러온(또는 불러오는 중인) 메일은 다시 불러오지 않는다
+      if (!quiet && sel === x && open[x.id].msgs) markRead(x);
+      if (!quiet) render();
+      return;
+    }
     open[x.id] = {loading: true}; render();
     if (x.acc){
       readTool(HOST.imap, "imap_get_email", {accountName: x.acc, folder: x.folder, uid: x.uid, bodyFormat: "html", maxContentLength: 600000, includeAttachmentText: false}).then(function(r){
@@ -1250,7 +1280,7 @@ function fmtSize(n){
         open[x.id] = {msgs: [{from: x.from, dateMs: x.dateMs, html: e.htmlContent || "", truncated: !!cut,
                               body: cleanBody(e.textContent || e.markdownContent || ""), att: att}], atts: {}};
         render();
-        markRead(x);
+        if (!quiet || sel === x) markRead(x);
       }).catch(function(e){
         if (open[x.id]) open[x.id] = {error: e || {code: "upstream_error"}};
         render();
@@ -1281,7 +1311,7 @@ function fmtSize(n){
       if (!open[x.id]) return;            // 불러오는 사이에 접었으면 읽음 처리도 하지 않는다
       open[x.id] = {msgs: out, atts: {}};
       render();
-      markRead(x);
+      if (!quiet || sel === x) markRead(x);
     }).catch(function(e){
       if (open[x.id]) open[x.id] = {error: e || {code: "upstream_error"}};
       render();
@@ -1330,7 +1360,9 @@ function fmtSize(n){
       return mcp.callTool(HOST.imap, "imap_search_emails", q, {cache: false}).then(function(r2){
         var hit = ((r2.payload || {}).messages || []).filter(function(e){ return norm(e.subject) === norm(subj); })[0];
         if (!hit) throw {code: "not_found", message: "PC 도우미의 Gmail 계정에서 같은 메일을 찾지 못했어요."};
-        return mcp.callTool(HOST.imap, "imap_download_attachment", {accountName: g.name, folder: hit.folder || "INBOX", uid: hit.uid, filename: a.name, extractText: true}, {cache: false});
+        var src = {accountName: g.name, folder: hit.folder || "INBOX", uid: hit.uid};
+        return mcp.callTool(HOST.imap, "imap_download_attachment", Object.assign({filename: a.name, extractText: true}, src), {cache: false})
+          .then(function(r3){ if (r3 && typeof r3 === "object") r3.__pcSrc = src; return r3; });
       });
     });
   }
@@ -1365,7 +1397,9 @@ function fmtSize(n){
       : gmailCall();
     call.then(function(r){
       var got = attFromResult(r, a.mime);
-      var s = {shown: true, text: got.text, blob: got.blob, viaPc: !!viaPc};
+      var s = {shown: true, text: got.text, blob: got.blob, viaPc: !!viaPc,
+               // PC 도우미로 다시 받을 수 있는 곳 (형식 제한으로 '파일로 저장'이 막히면 PC에 바로 저장할 때 쓴다)
+               pcSrc: (r && r.__pcSrc) || (x.acc ? {accountName: x.acc, folder: x.folder, uid: x.uid} : null)};
       if (got.blob){ s.url = URL.createObjectURL(got.blob); return s; }
       s.blockTypes = ((r && r.content) || []).map(function(b){
         return (b && b.type) + (b && b.resource ? "/" + (b.resource.mimeType || "") + (b.resource.blob ? "+blob" : b.resource.text ? "+text" : "") : "");
@@ -1398,11 +1432,52 @@ function fmtSize(n){
       o.atts[a.key] = {shown: true, error: e || {code: "upstream_error"}, viaPc: !!viaPc};
     }).then(render);
   }
+  // Claude 페이지의 '파일로 저장'은 정해진 형식(pdf·docx·xlsx·zip·이미지 등)만 허용한다.
+  // hwp·hwpx·xls·doc 같은 형식이 막히면, PC 도우미가 PC의 다운로드 폴더에 바로 저장한다.
+  var SAVE_OK = /\.(gif|png|jpe?g|webp|mp4|webm|txt|json|md|docx|pptx|epub|csv|ttf|html|svg|pdf|xlsx|zip)$/i;
+  // PC의 '다운로드' 폴더 (PC 도우미가 첨부를 받아 두는 '다운로드\imap-attachments'의 한 단계 위)
+  var pcDownloads = "";
+  function learnDownloads(p){
+    var m = /^(.*[\\/]Downloads)[\\/]imap-attachments[\\/][^\\/]+$/i.exec(String(p || ""));
+    if (m) pcDownloads = m[1];
+    return pcDownloads;
+  }
+  function saveToPc(a, s){
+    if (!s.pcSrc || !mcp) return Promise.reject({code: "no_pc"});
+    s.saveMsg = "PC에 저장하는 중"; render();
+    var dl = function(extra){ return mcp.callTool(HOST.imap, "imap_download_attachment", Object.assign({filename: a.name, extractText: false}, s.pcSrc, extra || {}), {cache: false}); };
+    var safe = String(a.name || "첨부파일").replace(/[\\/:*?"<>|]/g, "_");
+    var dir = pcDownloads || learnDownloads(s.savedPath);
+    // 다운로드 폴더를 아직 모르면 한 번 받아서 위치를 알아낸 뒤, 다운로드 폴더에 바로 저장한다
+    var where = dir ? Promise.resolve(dir) : dl().then(function(r){ return learnDownloads(((r && r.payload) || {}).path); });
+    return where.then(function(d){
+      if (!d) throw {code: "no_path"};
+      var sep = d.indexOf("\\") !== -1 ? "\\" : "/";
+      return dl({savePath: d + sep + safe});
+    }).then(function(r){
+      var p = (r && r.payload) || {};
+      if (!p.path) throw {code: "no_path"};
+      s.saveMsg = "다운로드 폴더에 저장했어요: " + p.path;
+    });
+  }
   function saveAtt(a, s){
-    if (!downloads || !s.blob) return;
+    if (!s.blob && !s.pcSrc) return;
+    var viaPc = function(why){
+      return saveToPc(a, s).catch(function(){ s.saveMsg = why || "저장하지 못했습니다"; });
+    };
+    // 허용 안 되는 형식이면 처음부터 PC에 저장한다
+    if (!downloads || !s.blob || !SAVE_OK.test(a.name || "")){
+      viaPc((extOf(a.name) || "이") + " 형식은 여기서 저장할 수 없어요. 메일 서비스에서 받아 주세요.").then(render);
+      return;
+    }
     s.saveMsg = "저장 창을 여는 중"; render();
     downloads.save({filename: a.name, data: s.blob}).then(function(){ s.saveMsg = "저장했습니다"; })
-      .catch(function(e){ s.saveMsg = e && e.code === "cancelled" ? "저장을 취소했습니다" : "저장하지 못했습니다"; })
+      .catch(function(e){
+        var c = e && e.code;
+        if (c === "declined" || c === "cancelled"){ s.saveMsg = "저장을 취소했습니다"; return; }
+        if (c === "rejected_extension" || c === "extension_not_enabled" || c === "unavailable" || c === "not_granted") return viaPc("이 형식은 여기서 저장할 수 없어요.");
+        s.saveMsg = "저장하지 못했습니다" + (c ? " (" + c + ")" : "");
+      })
       .then(render);
   }
 
@@ -1588,6 +1663,31 @@ function fmtSize(n){
       });
     });
   }
+  // 옛 한글(.hwp): 공개 라이브러리 hwp.js(Apache-2.0)로 원래 모양에 가깝게 그린다. 처음 한 번만 불러온다.
+  // 복잡한 서식·그림은 빠질 수 있다 → 정확한 모양은 'PC에 저장' 후 한글에서.
+  var hwpLib = null;
+  function renderHwp(box, blob){
+    if (!hwpLib) hwpLib = import("https://cdn.jsdelivr.net/npm/hwp.js@0.0.3/+esm");
+    var wrap = el("div", "hwpview");
+    box.appendChild(wrap);
+    return Promise.all([hwpLib, blob.arrayBuffer()]).then(function(r){
+      var Viewer = r[0].Viewer || (r[0].default && r[0].default.Viewer);
+      if (!Viewer) throw new Error("뷰어를 찾지 못했어요");
+      new Viewer(wrap, new Uint8Array(r[1]), {type: "array"});
+      // 쪽 너비(A4 등)가 읽기 창보다 넓으면 창 너비에 맞게 줄인다
+      setTimeout(function(){
+        // 쪽(page)은 너비가 인치 단위(예: 8.27in)로 정해진 div
+        var pg = Array.prototype.filter.call(wrap.querySelectorAll("div"), function(d){ return /in$/.test(d.style.width || ""); })[0];
+        var pw = pg ? pg.getBoundingClientRect().width : 0, bw = box.clientWidth - 8;
+        if (pw > 0 && bw > 0 && pw > bw) wrap.style.zoom = String(Math.max(0.35, bw / pw));
+      }, 60);
+      note(box, "한글 문서를 웹에서 그린 모양이라 복잡한 서식·그림은 다르게 보일 수 있어요. 정확한 모양은 'PC에 저장' 후 한글에서 열어 주세요.");
+    }).catch(function(e){
+      hwpLib = null;
+      wrap.remove();
+      note(box, "이 한글 파일은 여기서 열지 못했어요" + (e && e.message ? " (" + String(e.message).slice(0, 60) + ")" : "") + ". 'PC에 저장'을 눌러 한글에서 열어 주세요.");
+    });
+  }
   function buildPreview(box, x, a, s){
     var type = (s.blob && s.blob.type) || a.mime || "";
     var kind = kindOf(a.name, type);
@@ -1619,7 +1719,7 @@ function fmtSize(n){
     else if (kind === "audio" || kind === "video"){
       var m = document.createElement(kind); m.controls = true; m.src = s.url; m.style.maxWidth = "100%"; box.appendChild(m);
     }
-    else if (kind === "hwp") note(box, "옛 한글 형식(.hwp)은 여기서 열 수 없습니다. 파일로 저장해서 한글에서 열어 주세요.");
+    else if (kind === "hwp") job = renderHwp(box, s.blob);
     else note(box, "이 형식은 창 안에서 미리 볼 수 없습니다. 파일로 저장해서 열어 주세요.");
     if (job){
       var wait = el("span", "cap", "여는 중"); box.insertBefore(wait, box.firstChild);
@@ -1637,8 +1737,8 @@ function fmtSize(n){
     var v = el("div", "attview");
     var vh = el("div", "vh");
     vh.appendChild(el("b", null, a.name));
-    if (s.blob && downloads){
-      var sb = el("button", "btn", "파일로 저장"); sb.type = "button";
+    if ((s.blob && downloads) || s.pcSrc){
+      var sb = el("button", "btn", (!downloads || !s.blob || !SAVE_OK.test(a.name || "")) && s.pcSrc ? "PC에 저장" : "파일로 저장"); sb.type = "button";
       sb.addEventListener("click", function(){ saveAtt(a, s); });
       vh.appendChild(sb);
     }
@@ -3123,6 +3223,10 @@ function fmtSize(n){
         if (x === cursor) row.classList.add("cursor");
         row.addEventListener("click", function(){ if (row._noClick){ row._noClick = false; return; } cursor = x; if (x.isDraft) openDraft(x); else select(x); });
         row.addEventListener("keydown", function(e){ if (e.key === "Enter" && e.target === row){ e.preventDefault(); row.click(); } });
+        if (!x.isDraft){
+          row.addEventListener("mouseenter", function(){ row._hov = setTimeout(function(){ if (!open[x.id] && mcp) toggle(x, true); }, 180); });
+          row.addEventListener("mouseleave", function(){ clearTimeout(row._hov); });
+        }
         var ck = el("label", "pick"); ck.title = "선택"; var cki = el("input"); cki.type = "checkbox"; cki.checked = !!picked[x.id];
         cki.setAttribute("aria-label", x.subject + " 선택");
         ck.addEventListener("click", function(e){ e.stopPropagation(); });
@@ -3836,7 +3940,11 @@ function fmtSize(n){
     load(false);
     if (mcp){
       // 다른 계정 받은메일함도 뒤에서 미리 읽어 둔다 → 메뉴를 누르면 바로 보이고, 안 읽은 개수도 처음부터 보인다
-      setTimeout(function(){ ensureImapAccounts().then(function(){ ["gmail"].concat(imapNames()).forEach(prefetch); }).catch(function(){}); }, 1500);
+      setTimeout(function prefetchAll(){
+        var cur = store[keyOf(state.account)];
+        if (cur && cur.loading){ setTimeout(prefetchAll, 1500); return; }   // 지금 보는 목록을 먼저 다 받는다
+        ensureImapAccounts().then(function(){ ["gmail"].concat(imapNames()).forEach(prefetch); }).catch(function(){});
+      }, 1500);
       setTimeout(function(){ if (!known.gmail) poll("gmail"); }, 4000);
       // IMAP 계정도 처음에 한 번 읽어 두어야 그다음부터 새 메일을 알아챈다
       setTimeout(function(){ ensureImapAccounts().then(function(){ imapNames().forEach(function(a){ if (!known[a]) poll(a); }); }).catch(function(){}); }, 8000);
