@@ -337,6 +337,8 @@ a{color:inherit}
 .attview .vh b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attbody{width:100%;display:flex;flex-direction:column;gap:8px}
 .hwpview{overflow:auto;max-height:80vh;padding:8px;border-radius:10px;background:#E9ECF0;color:#111}
+.hwppages{display:flex;flex-direction:column;gap:10px;max-height:80vh;overflow:auto;padding:10px;border-radius:10px;background:#E9ECF0}
+.hwppage svg{display:block;width:100%;height:auto;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18)}
 .attview img{max-width:100%;height:auto;border-radius:8px;background:#FFFFFF}
 .attview pre{margin:0;max-height:60vh;overflow:auto;white-space:pre-wrap;font-family:inherit;font-size:13.5px;width:100%;background:var(--surface2);border-radius:10px;padding:12px}
 .cap{font-size:12.5px;color:var(--faint);overflow-wrap:anywhere}
@@ -1665,8 +1667,150 @@ function fmtSize(n){
   }
   // 옛 한글(.hwp): 공개 라이브러리 hwp.js(Apache-2.0)로 원래 모양에 가깝게 그린다. 처음 한 번만 불러온다.
   // 복잡한 서식·그림은 빠질 수 있다 → 정확한 모양은 'PC에 저장' 후 한글에서.
-  var hwpLib = null;
+  // 먼저 rhwp(MIT, Rust+WebAssembly, 2026)로 그린다 — 줄 간격·표·도장 그림까지 한글 프로그램과 거의 같다.
+  // 각 쪽을 SVG 그림(img)으로만 보여 줘서 문서 속 스크립트는 실행되지 않는다. 안 되면 hwp.js로 넘어간다.
+  var RHWP = "https://cdn.jsdelivr.net/npm/@rhwp/core@0.8.7/";
+  var rhwpLib = null;
+  function loadRhwp(){
+    if (!rhwpLib) rhwpLib = import(RHWP + "rhwp.js").then(function(m){
+      var ctx = null, last = "";
+      // rhwp가 글자 폭을 잴 때 쓰는 함수 (필수)
+      globalThis.measureTextWidth = function(font, text){
+        if (!ctx) ctx = document.createElement("canvas").getContext("2d");
+        if (font !== last){ ctx.font = font; last = font; }
+        return ctx.measureText(text).width;
+      };
+      // 본체(WebAssembly, 약 12MB): 페이지에서 바로 받을 수 없으면(보안 설정) 브라우저에 저장해 둔 것 → PC 도우미 순으로
+      return m.default({module_or_path: RHWP + "rhwp_bg.wasm"}).catch(function(){
+        return rhwpWasmBytes().then(function(bytes){ return m.default({module_or_path: bytes}); });
+      }).then(function(){ return m; });
+    });
+    return rhwpLib;
+  }
+  var RHWP_WASM = RHWP + "rhwp_bg.wasm";
+  function idb(){
+    return new Promise(function(ok, no){
+      try {
+        var rq = indexedDB.open("claude-mail-libs", 1);
+        rq.onupgradeneeded = function(){ rq.result.createObjectStore("files"); };
+        rq.onsuccess = function(){ ok(rq.result); }; rq.onerror = function(){ no(rq.error); };
+      } catch(e){ no(e); }
+    });
+  }
+  function idbGet(key){ return idb().then(function(db){ return new Promise(function(ok){ var r = db.transaction("files").objectStore("files").get(key); r.onsuccess = function(){ ok(r.result || null); }; r.onerror = function(){ ok(null); }; }); }).catch(function(){ return null; }); }
+  function idbPut(key, val){ return idb().then(function(db){ return new Promise(function(ok){ var t = db.transaction("files", "readwrite"); t.objectStore("files").put(val, key); t.oncomplete = ok; t.onerror = ok; }); }).catch(function(){}); }
+  function rhwpWasmBytes(){
+    return idbGet(RHWP_WASM).then(function(saved){
+      if (saved && saved.byteLength > 1000000) return new Uint8Array(saved);
+      if (!mcp) throw new Error("Failed to fetch");
+      // PC 도우미가 받아서 384KB씩 넘겨준다 (처음 한 번만)
+      var datas = [], total = 0;
+      function part(i){
+        return imgCallTool("fetch_lib", {url: RHWP_WASM, part: i}).then(function(r){
+          var p = partOf(r);
+          if (!p) throw new Error("PC 도우미가 한글 보기 파일을 넘겨주지 못했어요");
+          datas.push(p.data); total = p.parts;
+          if (hwpProgress) hwpProgress("한글 보기 프로그램을 처음 한 번 받는 중… " + Math.round((i + 1) * 100 / p.parts) + "%");
+          return i + 1 < p.parts ? part(i + 1) : null;
+        });
+      }
+      return part(0).then(function(){
+        var bin = atob(datas.join("")), u = new Uint8Array(bin.length);
+        for (var k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+        idbPut(RHWP_WASM, u.buffer.slice(0));   // 다음부터는 바로
+        return u;
+      });
+    });
+  }
+  var hwpProgress = null;
+  // 한컴 글꼴 대신 rhwp가 쓰는 공개 글꼴 (rhwp 설명서의 권장 목록). 한글 문서를 처음 열 때만 불러온다.
+  var HWP_FONTS = ["Noto Serif KR", "Noto Sans KR", "Nanum Myeongjo", "Nanum Gothic"];
+  var hwpFontLink = null;
+  function loadHwpFonts(text){
+    if (!hwpFontLink){
+      hwpFontLink = document.createElement("link"); hwpFontLink.rel = "stylesheet";
+      hwpFontLink.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Noto+Serif+KR:wght@400;700&family=Nanum+Gothic:wght@400;700&family=Nanum+Myeongjo:wght@400;700&display=swap";
+      document.head.appendChild(hwpFontLink);
+    }
+    if (!document.fonts || !document.fonts.load) return Promise.resolve();
+    var css = new Promise(function(ok){ if (hwpFontLink.sheet) ok(); else { hwpFontLink.addEventListener("load", ok); hwpFontLink.addEventListener("error", ok); } });
+    var sample = String(text || "가").slice(0, 20000);
+    return css.then(function(){
+      var jobs = [];
+      HWP_FONTS.forEach(function(f){ jobs.push(document.fonts.load('16px "' + f + '"', sample)); jobs.push(document.fonts.load('bold 16px "' + f + '"', sample)); });
+      // 글꼴을 다 못 받아도 4초 뒤에는 그린다
+      return Promise.race([Promise.all(jobs).catch(function(){}), sleep(4000)]);
+    });
+  }
+  // rhwp가 만든 SVG에서 위험한 부분(스크립트·외부 링크·이벤트)을 지우고 문서에 넣을 노드로 만든다
+  function safeSvg(svgText){
+    var d = new DOMParser().parseFromString(svgText, "image/svg+xml");
+    var root = d.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== "svg") return null;
+    Array.prototype.slice.call(root.querySelectorAll("script, foreignObject, iframe, object, embed, a")).forEach(function(n){
+      if (n.nodeName.toLowerCase() === "a"){ while (n.firstChild) n.parentNode.insertBefore(n.firstChild, n); }
+      n.parentNode.removeChild(n);
+    });
+    [root].concat(Array.prototype.slice.call(root.querySelectorAll("*"))).forEach(function(n){
+      Array.prototype.slice.call(n.attributes).forEach(function(at){
+        var nm = at.name.toLowerCase(), v = String(at.value || "").trim();
+        if (/^on/.test(nm)) n.removeAttribute(at.name);
+        // 그림 칸(<image>)은 문서에 들어 있는 data: 그림이면 형식과 상관없이 둔다 (그림 안에서는 스크립트가 돌지 않는다)
+        else if ((nm === "href" || nm === "xlink:href" || nm === "src") &&
+                 !(n.nodeName.toLowerCase() === "image" ? /^(data:|#)/i : /^(data:image\/|#)/i).test(v)) n.removeAttribute(at.name);
+      });
+    });
+    // 읽기 창 너비에 맞게 줄어들도록: viewBox를 두고 고정 크기를 뗀다
+    if (!root.getAttribute("viewBox")){
+      var w = parseFloat(root.getAttribute("width")), h = parseFloat(root.getAttribute("height"));
+      if (w > 0 && h > 0) root.setAttribute("viewBox", "0 0 " + w + " " + h);
+    }
+    root.removeAttribute("width"); root.removeAttribute("height");
+    return document.importNode(root, true);
+  }
   function renderHwp(box, blob){
+    var pages = el("div", "hwppages");
+    var prog = el("span", "cap", "");
+    box.appendChild(prog); box.appendChild(pages);
+    hwpProgress = function(t){ prog.textContent = t; };
+    var lib, bytes;
+    return Promise.all([loadRhwp(), blob.arrayBuffer()]).then(function(r){
+      hwpProgress = null; prog.remove();
+      lib = r[0]; bytes = new Uint8Array(r[1]);
+      // 1) 한 번 그려서 문서에 쓰인 글자를 모으고 → 2) 그 글자의 공개 글꼴을 받은 뒤 → 3) 글자 폭을 다시 재서 제대로 그린다
+      var d0 = new lib.HwpDocument(bytes.slice(0)), txt = "";
+      for (var k = 0; k < Math.min(d0.pageCount(), 60); k++) txt += d0.renderPageSvg(k).replace(/<[^>]+>/g, "");
+      try { d0.free && d0.free(); } catch(e){}
+      return loadHwpFonts(txt);
+    }).then(function(){
+      var doc = new lib.HwpDocument(bytes);
+      var total = doc.pageCount(), n = Math.min(total, 60), i = 0;
+      // 쪽을 하나씩 그려 붙인다 (긴 문서도 첫 쪽부터 바로 보이게)
+      return new Promise(function(done){
+        (function next(){
+          if (i >= n || !pages.isConnected){ try { doc.free && doc.free(); } catch(e){} done(); return; }
+          var node = safeSvg(doc.renderPageSvg(i++));
+          var pg = el("div", "hwppage"); if (node) pg.appendChild(node); pages.appendChild(pg);
+          setTimeout(next, 0);
+        })();
+      }).then(function(){
+        if (total > 60) note(box, "앞의 60쪽만 보여 드려요. 전체는 'PC에 저장' 후 한글에서 열어 주세요.");
+        // 상태 줄: 어떤 방식으로 그렸는지, 공개 글꼴을 몇 개 받았는지 (문제가 있을 때 원인을 알 수 있게)
+        var got = 0;
+        try { HWP_FONTS.forEach(function(f){ if (document.fonts.check('16px "' + f + '"', "가")) got++; }); } catch(e){}
+        box.appendChild(el("span", "cap", "rhwp " + RHWP.match(/@([\d.]+)/)[1] + " · " + total + "쪽 · 공개 글꼴 " + got + "/" + HWP_FONTS.length + "개"));
+      });
+    }).catch(function(e){
+      rhwpLib = null; pages.remove(); hwpProgress = null; prog.remove();
+      // 예전 확장 프로그램(1.4.1 이하)은 한글 보기 파일을 대신 받아 주지 못한다
+      if (e && /fetch_lib|unknown tool|not_in_manifest/i.test(String(e.message || "") + " " + String(e.code || ""))) e = {message: "확장 프로그램을 1.4.2 이상으로 업데이트하면 정확한 모양으로 볼 수 있어요"};
+      // rhwp가 왜 안 됐는지 남겨 둔다 (보안 설정으로 막힌 건지 알아보려고)
+      var why = String((e && (e.message || e.name)) || e || "알 수 없음").replace(/\s+/g, " ").slice(0, 160);
+      return renderHwpOld(box, blob).then(function(){ box.appendChild(el("span", "cap", "rhwp를 쓰지 못해 예전 방식으로 그렸어요 (" + why + ")")); });
+    });
+  }
+  var hwpLib = null;
+  function renderHwpOld(box, blob){
     if (!hwpLib) hwpLib = import("https://cdn.jsdelivr.net/npm/hwp.js@0.0.3/+esm");
     var wrap = el("div", "hwpview");
     box.appendChild(wrap);
@@ -2756,18 +2900,19 @@ function fmtSize(n){
   }
   // PC 도우미 호출 한도(rate_limited)에 걸리지 않게: 호출 사이를 조금 띄우고, 걸리면 모두 잠깐 쉬었다가 다시 부른다
   var imgGate = {next: 0, pauseUntil: 0};
-  function imgCall(args, tries){
+  function imgCall(args, tries){ return imgCallTool("fetch_image", args, tries); }
+  function imgCallTool(tool, args, tries){
     tries = tries || 0;
     var now = Date.now(), at = Math.max(now, imgGate.next, imgGate.pauseUntil);
     imgGate.next = at + 150;
     return sleep(at - now).then(function(){
-      return mcp.callTool(HOST.att, "fetch_image", args, {cache: false});
+      return mcp.callTool(HOST.att, tool, args, {cache: false});
     }).catch(function(e){
       var limited = e && (e.code === "rate_limited" || /rate limit/i.test(String(e.message || "")));
       if (!limited || tries >= 6) throw e;
       var wait = 2000 * (tries + 1);
       imgGate.pauseUntil = Math.max(imgGate.pauseUntil, Date.now() + wait);
-      return imgCall(args, tries + 1);
+      return imgCallTool(tool, args, tries + 1);
     });
   }
   // 조각 크기: 처음엔 크게(256KB) 받아 호출 수를 줄인다. 큰 조각이 중간에 빠지거나 거절되면 48KB로 내려 다시 받는다.

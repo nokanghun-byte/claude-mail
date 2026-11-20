@@ -22,6 +22,19 @@ const MIME = {
 };
 
 const TOOLS = [{
+  name: "fetch_lib",
+  description: "Download one allow-listed library file that a mail page needs but cannot fetch itself (today only the rhwp WebAssembly file used to show .hwp attachments) and return it as text in pieces: JSON {size, parts, part, data} where data is the base64 of piece number `part` (0-based, 384 KB each). Ask for part 0 first, then 1..parts-1. The file is kept in memory for 10 minutes.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "The library file address (must be on the allow list)." },
+      part: { type: "integer", minimum: 0, description: "Piece number, 0-based." }
+    },
+    required: ["url", "part"],
+    additionalProperties: false
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+}, {
   name: "read_saved_attachment",
   description: "Read one attachment file that the imap server saved to the imap-attachments download folder, and return its raw bytes (base64) so a page can display it. The saved copy is then removed from that folder unless keep is true. Only plain file names inside that folder are accepted; paths are refused.",
   inputSchema: {
@@ -367,6 +380,38 @@ function reply(id, result){ send({ jsonrpc: "2.0", id, result }); }
 function fail(id, code, message){ send({ jsonrpc: "2.0", id, error: { code, message } }); }
 function toolError(id, text){ reply(id, { content: [{ type: "text", text }], isError: true }); }
 
+// 페이지가 직접 받지 못하는 라이브러리 파일을 대신 받아 조각으로 넘긴다 (허용 목록에 있는 주소만)
+const LIB_ALLOW = ["https://cdn.jsdelivr.net/npm/@rhwp/core@0.8.7/rhwp_bg.wasm"];
+const LIB_PART = 384 * 1024;   // 3의 배수
+const libCache = new Map();    // url -> {buf, at}
+let libLoading = new Map();
+async function fetchLib(id, args){
+  const url = String(args && args.url || "");
+  const part = Number.isInteger(args && args.part) ? args.part : 0;
+  if (LIB_ALLOW.indexOf(url) === -1) return toolError(id, "this address is not on the allow list");
+  try {
+    for (const [k, v] of libCache) if (Date.now() - v.at > 10 * 60 * 1000) libCache.delete(k);
+    if (!libCache.has(url)){
+      if (!libLoading.has(url)) libLoading.set(url, (async () => {
+        const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 60000);
+        try {
+          const res = await fetch(url, { signal: ctl.signal });
+          if (!res.ok) throw new Error("server answered " + res.status);
+          const buf = Buffer.from(await res.arrayBuffer());
+          libCache.set(url, { buf, at: Date.now() });
+        } finally { clearTimeout(timer); libLoading.delete(url); }
+      })());
+      await libLoading.get(url);
+    }
+    const buf = libCache.get(url).buf;
+    const parts = Math.max(1, Math.ceil(buf.length / LIB_PART));
+    if (part >= parts) return toolError(id, "no such part");
+    reply(id, { content: [{ type: "text", text: JSON.stringify({ size: buf.length, parts, part, data: buf.subarray(part * LIB_PART, (part + 1) * LIB_PART).toString("base64") }) }] });
+  } catch (e){
+    toolError(id, "could not fetch library: " + (e && e.name === "AbortError" ? "timed out" : (e && e.message) || "error"));
+  }
+}
+
 function readAttachment(id, args){
   const raw = args && typeof args.filename === "string" ? args.filename : "";
   const name = raw.normalize("NFC");
@@ -419,6 +464,7 @@ function handle(msg){
     const name = params && params.name;
     try {
       if (name === "read_saved_attachment") return readAttachment(id, params.arguments || {});
+      if (name === "fetch_lib"){ pending++; return fetchLib(id, params.arguments || {}).finally(() => { pending--; if (ended && !pending) process.exit(0); }); }
       if (name === "stage_file") return stageFile(id, params.arguments || {});
       if (name === "drive_folder_status") return driveStatus(id);
       if (name === "stage_chunk") return stageChunk(id, params.arguments || {});

@@ -62,7 +62,8 @@
                     "stage_chunk",
                     "rclone_status",
                     "upload_status",
-                    "drive_login"
+                    "drive_login",
+                    "fetch_lib"
                 ]
             },
             {
@@ -92,7 +93,8 @@
                     "open_account_setup",
                     "convert_document",
                     "imap_save_draft",
-                    "imap_discard_draft"
+                    "imap_discard_draft",
+                    "fetch_lib"
                 ]
             },
             {
