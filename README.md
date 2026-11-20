@@ -45,7 +45,7 @@ Claude 아티팩트(페이지)와 내 PC에서 돌아가는 작은 도우미 서
 | `install/install.ps1` | Windows 수동 설치 스크립트 |
 | `install/rclone-setup.ps1` | 큰 첨부파일용 Google Drive 연결 (선택) |
 
-IMAP 연결은 오픈소스 [imap-mcp-server](https://www.npmjs.com/package/imap-mcp-server)를 씁니다. 계정 정보는 내 PC(`~/.imap-mcp/accounts.json`)에 암호화되어 저장됩니다.
+IMAP 연결은 오픈소스 [imap-mcp-server](https://www.npmjs.com/package/imap-mcp-server)를 씁니다. 계정 정보는 내 PC(`~/.imap-mcp/accounts.json`)에 암호화되어 저장됩니다. 첨부 미리보기용 임시 파일은 `~/.claude-mail/attachments`에 잠깐 받았다가 지웁니다.
 
 ### 설치 (Windows)
 
@@ -125,7 +125,7 @@ It consists of a Claude artifact (the page) and a small helper server running on
 | `install/install.ps1` | Windows manual installer |
 | `install/rclone-setup.ps1` | Google Drive link for large attachments (optional) |
 
-IMAP access uses the open-source [imap-mcp-server](https://www.npmjs.com/package/imap-mcp-server). Account credentials are stored encrypted on your PC (`~/.imap-mcp/accounts.json`).
+IMAP access uses the open-source [imap-mcp-server](https://www.npmjs.com/package/imap-mcp-server). Account credentials are stored encrypted on your PC (`~/.imap-mcp/accounts.json`). Attachments being previewed are briefly saved to `~/.claude-mail/attachments` and then removed.
 
 ### Install (Windows)
 

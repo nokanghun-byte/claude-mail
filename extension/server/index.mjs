@@ -6,11 +6,11 @@
 // Claude 앱의 내장 Node.js는 하위 Node 프로세스를 띄울 수 없으므로 모두 이 프로세스 안에서 돈다.
 
 import { createRequire } from "module";
-import { appendFileSync } from "fs";
-import { tmpdir } from "os";
+import { appendFileSync, rmdirSync } from "fs";
+import { tmpdir, homedir } from "os";
 import { join } from "path";
 
-const VERSION = "1.4.3";
+const VERSION = "1.4.4";
 const require = createRequire(import.meta.url);
 const DEBUG_FILE = join(tmpdir(), "claude-mail-debug.log");
 function log(...a){
@@ -27,6 +27,11 @@ process.env.IMAP_MCP_ENABLED_TOOLS = [
   "imap_delete_email", "imap_reply_to_email", "imap_send_email", "imap_flag_email", "imap_unflag_email",
   "imap_forward_email", "imap_move_email", "imap_save_draft"
 ].join(",");
+
+// 첨부 미리보기용 임시 폴더: '다운로드' 폴더 대신 사용자 폴더의 숨은 폴더(~/.claude-mail/attachments)를 쓴다.
+// (예전 버전이 만든 빈 '다운로드\imap-attachments' 폴더는 비어 있을 때만 지운다)
+if (!process.env.IMAP_DOWNLOAD_DIR) process.env.IMAP_DOWNLOAD_DIR = join(homedir(), ".claude-mail", "attachments");
+try { rmdirSync(join(homedir(), "Downloads", "imap-attachments")); } catch (e) { /* 없거나 파일이 남아 있으면 그대로 둔다 */ }
 
 // 앱이 읽기만 하는 도구는 묻지 않고, 지우거나 보내는 도구만 확인하도록 도구마다 성격을 붙인다
 const READ_ONLY = new Set(["imap_list_accounts", "imap_test_account", "imap_list_folders", "imap_folder_status",

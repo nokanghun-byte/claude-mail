@@ -69,6 +69,12 @@ async function fixBrokenSubjects(client, list) {
 
 // src/utils/client-side-search.ts`);
 if (!s.includes("async function fixBrokenSubjects")) throw new Error("제목 고치기 함수를 넣지 못했어요");
+// 저장 위치가 '~/'로 시작하면 사용자 폴더로 바꾼다 (페이지가 '~/Downloads/파일이름'으로 다운로드 폴더에 저장하게)
+{
+  const head = "  }, async ({ accountId: rawAccountId, accountName, folder, uid, filename, savePath, extractText }) => {\n";
+  if (s.split(head).length - 1 !== 1) throw new Error("첨부 받기 함수 시작을 못 찾았어요");
+  s = s.replace(head, head + "    if (typeof savePath === \"string\" && /^~[\\\\/]/.test(savePath)) savePath = join(homedir(), savePath.slice(2));\n");
+}
 // 첨부를 저장 위치(savePath)에 저장할 때 같은 이름의 파일이 있으면 덮어쓰지 않고 '이름 (1).확장자'로 저장한다
 for (const [fsv, pv, tv] of [["fs3", "path3", "targetPath2"], ["fs2", "path2", "targetPath"]]) {
   const from = `    const ${tv} = savePath || ${pv}.join(DOWNLOAD_DIR, ${pv}.basename(resolvedFilename));`;
