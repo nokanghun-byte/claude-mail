@@ -40,7 +40,8 @@ const TOOLS = [{
   inputSchema: {
     type: "object",
     properties: {
-      url: { type: "string", description: "The http(s) address of the image." }
+      url: { type: "string", description: "The http(s) address of the image." },
+      as: { type: "string", enum: ["image", "resource"], description: "Optional. \"resource\" returns the bytes as an embedded resource blob instead of an image block (large images can be dropped from image blocks on the way to a page)." }
     },
     required: ["url"],
     additionalProperties: false
@@ -326,7 +327,9 @@ async function fetchImage(id, args){
     if (len > IMG_MAX) return toolError(id, "image too large");
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > IMG_MAX) return toolError(id, "image too large");
-    reply(id, { content: [{ type: "image", data: buf.toString("base64"), mimeType: type }] });
+    const b64 = buf.toString("base64");
+    if (args && args.as === "resource") return reply(id, { content: [{ type: "resource", resource: { uri: "mail-image:" + u.hostname + "/" + buf.length, mimeType: type, blob: b64 } }] });
+    reply(id, { content: [{ type: "image", data: b64, mimeType: type }] });
   } catch (e){
     toolError(id, "could not fetch image: " + (e && e.name === "AbortError" ? "timed out" : (e && e.message) || "error"));
   }

@@ -471,6 +471,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .tag.cat{color:color-mix(in srgb,var(--c) 82%,var(--ink));background:color-mix(in srgb,var(--c) 10%,transparent)}
 .tag.work{color:var(--muted);background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .empty{padding:64px 24px;font-size:14px;line-height:1.6}
+.mlist .dayline{position:sticky;top:0;z-index:2;padding:14px 12px 6px;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--surface);letter-spacing:-.01em}
+.mlist .dayline:first-child{padding-top:6px}
+.mlist .feedend{display:flex;justify-content:center;padding:18px 12px 28px;font-size:13px;color:var(--faint)}
 .skel{height:62px;border-radius:12px;margin:6px 10px}
 .bulkbar{margin:10px 12px 2px;padding:8px 10px;border-radius:12px;box-shadow:var(--shadow-md)}
 .note{border-radius:12px;font-size:13px;line-height:1.55}
@@ -575,7 +578,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="lrow2">
         <div class="seg" role="group" aria-label="기간">
-          <button type="button" data-range="today" aria-pressed="true">오늘</button>
+          <button type="button" data-range="all" aria-pressed="true">전체</button>
+          <button type="button" data-range="today" aria-pressed="false">오늘</button>
           <button type="button" data-range="yesterday" aria-pressed="false">어제</button>
           <button type="button" data-range="week" aria-pressed="false">이번 주</button>
           <button type="button" data-range="month" aria-pressed="false">한 달</button>
@@ -616,8 +620,10 @@ var IMAP_PLAIN = ["INBOX","Deleted Messages","보관함"];
 
 function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function addDays(d, n){ var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
-function rangeBounds(range, now){
+var FEED_DAYS = 14;   // '전체'에서 한 번에 더 불러오는 날 수
+function rangeBounds(range, now, mul){
   var t0 = startOfDay(now);
+  if (range === "all") return {from: addDays(t0, -(FEED_DAYS * (mul || 1)) + 1), to: addDays(t0, 1)};
   if (range === "yesterday") return {from: addDays(t0, -1), to: t0};
   if (range === "month") return {from: addDays(t0, -29), to: addDays(t0, 1)};
   if (range === "week"){
@@ -713,12 +719,15 @@ function mapImapMessage(m, sent, trash){
   var chips = [];
   if (folder === "Deleted Messages") chips.push("휴지통");
   else if (folder !== "INBOX") chips.push(folder);
+  var junk = /@localhost>?$/i.test(m.messageId || "") && /(\?{2,}|[\u0000-\u001f\ufffd])/.test(String(m.from || "") + String(m.subject || "")) ||
+             /^\s*[\?\-!\*\{\^\u0000-\u001f]{4,}[^<]*@/.test(String(m.from || ""));
+  if (junk) chips.unshift("스팸 의심");
   return {
     id: folder + ":" + m.uid, dateMs: Date.parse(m.date), from: f.name, subject: subject, snippet: "",
     unread: !sent && (m.flags || []).indexOf("\\Seen") === -1, starred: (m.flags || []).indexOf("\\Flagged") !== -1,
     sent: !!sent, fromAddr: parseFrom(m.from).addr,
     chips: chips, work: custom, url: "", count: 1, folder: folder, uid: m.uid, msgid: m.messageId || "",
-    cat: custom ? "act" : classifyImap(folder, subject)
+    cat: junk ? "ad" : custom ? "act" : classifyImap(folder, subject)
   };
 }
 function cleanBody(text, max){
@@ -812,7 +821,7 @@ function fmtSize(n){
 /*PURE-END*/
 
 (function(){
-  var state = {account:"gmail", range:"today", unreadOnly:false, cat:"all", box:"inbox"};
+  var state = {account:"gmail", range:"all", unreadOnly:false, cat:"all", box:"inbox"};
   state.q = "";   // 검색어 (저장하지 않는다)
   function keyOf(acc){ return acc + "|" + state.box + "|" + (state.q ? "q:" + state.q : state.box === "trash" ? "all" : state.range); }
   var SEARCH_SINCE_DAYS = 365;   // 검색은 최근 1년 안에서
@@ -925,13 +934,13 @@ function fmtSize(n){
     var saved = JSON.parse(localStorage.getItem("mailview") || "null");
     if (saved){
       if (ACC[saved.account]) state.account = saved.account;
-      if (["today","yesterday","week","month"].indexOf(saved.range) !== -1) state.range = saved.range;
+      if (saved.rv === 2 && ["all","today","yesterday","week","month"].indexOf(saved.range) !== -1) state.range = saved.range;
       state.unreadOnly = !!saved.unreadOnly;
       if (["sent", "inbox", "drafts", "trash"].indexOf(saved.box) !== -1) state.box = saved.box;
       if (saved.cat === "all" || CATS.some(function(c){ return c.key === saved.cat; })) state.cat = saved.cat;
     }
   }catch(e){}
-  function persist(){ try{ localStorage.setItem("mailview", JSON.stringify(state)); }catch(e){} }
+  function persist(){ try{ localStorage.setItem("mailview", JSON.stringify(Object.assign({rv: 2}, state))); }catch(e){} }
 
   var $ = function(id){ return document.getElementById(id); };
   function el(tag, cls, text){
@@ -982,7 +991,7 @@ function fmtSize(n){
     return p;
   }
   function fetchGmail(range, fresh, sent, q){
-    var b = rangeBounds(range, new Date());
+    var b = rangeBounds(range, new Date(), loadMul);
     if (q) b = {from: addDays(startOfDay(new Date()), -SEARCH_SINCE_DAYS), to: addDays(startOfDay(new Date()), 1)};
     var query = q ? q + (sent ? " in:sent" : " -in:sent") + " -in:drafts newer_than:1y" : sent ? "in:sent after:" + ymd(addDays(b.from, -1), "/") : "after:" + ymd(addDays(b.from, -1), "/") + " -in:sent -in:drafts";
     var items = [], storedAt = null, pages = 0;
@@ -1030,7 +1039,7 @@ function fmtSize(n){
         return {items: items, at: at, more: more};
       });
     }
-    var b = rangeBounds(range, new Date());
+    var b = rangeBounds(range, new Date(), loadMul);
     var input = sent
       ? {accountName: account, since: ymd(addDays(b.from, -1), "-"), folder: "Sent Messages", limit: 300 * loadMul}
       : {accountName: account, since: ymd(addDays(b.from, -1), "-"), searchAllFolders: true, includeTrash: false, limit: 300 * loadMul};
@@ -1617,6 +1626,26 @@ function fmtSize(n){
     return name + " 메일을 불러오지 못했습니다. 다시 시도해 주세요." + (code ? " (" + code + ")" : "");
   }
 
+  function scrolledFeed(node){
+    for (var p = node.parentElement; p && p !== document.body; p = p.parentElement){
+      var oy = getComputedStyle(p).overflowY;
+      if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight + 40) return p.scrollTop > 0;
+    }
+    return (document.scrollingElement || document.documentElement).scrollTop > 0;
+  }
+  function feedMore(){
+    var k = keyOf(state.account);
+    if (store[k] && store[k].loading) return;
+    moreLv[k] = (moreLv[k] || 1) + 1; load(true);
+  }
+  function dayLabel(ms){
+    var d = new Date(ms), t0 = startOfDay(new Date()), d0 = startOfDay(d);
+    var diff = Math.round((t0 - d0) / 864e5);
+    var wd = "일월화수목금토".charAt(d.getDay());
+    if (diff === 0) return "오늘";
+    if (diff === 1) return "어제";
+    return (d.getFullYear() !== t0.getFullYear() ? d.getFullYear() + "년 " : "") + (d.getMonth() + 1) + "월 " + d.getDate() + "일 (" + wd + ")";
+  }
   function fmtTime(ms, wide){
     var d = new Date(ms);
     var hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
@@ -2538,6 +2567,8 @@ function fmtSize(n){
   function dataUrlOf(r){
     var bs = (r && r.content) || [];
     for (var i = 0; i < bs.length; i++){ var b = bs[i] || {}; if (typeof b.data === "string" && b.mimeType) return "data:" + b.mimeType + ";base64," + b.data; }
+    // 큰 그림은 이미지 칸이 아니라 파일(resource) 칸으로 받는다 (이미지 칸의 큰 그림은 중간에 빠질 수 있다)
+    for (var k = 0; k < bs.length; k++){ var rs = (bs[k] || {}).resource; if (rs && typeof rs.blob === "string" && /^image//.test(rs.mimeType || "")) return "data:" + rs.mimeType + ";base64," + rs.blob; }
     return "";
   }
   function isInlinePart(a, m){
@@ -2555,7 +2586,7 @@ function fmtSize(n){
     function worker(){
       if (i >= jobs.length) return Promise.resolve();
       var j = jobs[i++];
-      return mcp.callTool(HOST.att, "fetch_image", {url: unescAttr(j.raw)}, {cache: false}).then(function(r){
+      return mcp.callTool(HOST.att, "fetch_image", {url: unescAttr(j.raw), as: "resource"}, {cache: false}).then(function(r){
         var d = dataUrlOf(r);
         if (d){ j.m.htmlShown = replaceSrc(j.m.htmlShown || j.m.html, j.raw, d); ok++; }
       }, function(e){ if (!firstErr) firstErr = e || {code: "upstream_error"}; }).then(function(){
@@ -2626,6 +2657,16 @@ function fmtSize(n){
     if (o.msgs && o.msgs.some(function(m){ return m.html; }))
       tools.appendChild(btn(o.textOnly ? "원래 모양으로 보기" : "글자만 보기", "", function(){ o.textOnly = !o.textOnly; if (o.trOn) translate(x, o); render(); }));
     if (x.url){ var ga = el("a", "btn", "Gmail에서 열기"); ga.href = x.url; ga.target = "_blank"; ga.rel = "noopener noreferrer"; tools.appendChild(ga); }
+    else if (x.acc && ACC[x.acc] && /^https:\/\//.test(ACC[x.acc].site || "")){
+      // 웹메일 주소에는 메일 번호(IMAP UID)가 쓰이지 않아 그 메일로 바로 갈 수 없다. 제목을 복사해 두고 웹메일을 연다.
+      var wa = el("a", "btn", ACC[x.acc].label + " 메일에서 열기"); wa.href = ACC[x.acc].site; wa.target = "_blank"; wa.rel = "noopener noreferrer";
+      wa.title = "제목을 복사하고 웹메일을 열어요. 검색창에 붙여 넣으면 바로 찾을 수 있어요.";
+      wa.addEventListener("click", function(){
+        var done = function(){ flash("제목을 복사했어요. 웹메일 검색창에 붙여 넣으세요."); };
+        try { navigator.clipboard.writeText(x.subject || "").then(done, function(){}); } catch(e){}
+      });
+      tools.appendChild(wa);
+    }
     if (!o.loading && !o.error){
       tools.appendChild(btn("답장", "primary", function(){ openComposer(x, o, false); }));
       tools.appendChild(btn("전체 답장", "", function(){ openComposer(x, o, true); }));
@@ -2806,6 +2847,8 @@ function fmtSize(n){
     var data = store[key] || {};
     var acc = ACC[state.account];
     var wide = state.range === "week";
+    var feed = state.range === "all" && !state.q && state.box !== "trash" && state.box !== "drafts";
+    var dayLines = !state.q && state.box !== "drafts" && state.range !== "today" && state.range !== "yesterday";
     var app = $("app");
 
     document.querySelectorAll("[data-account]").forEach(function(b){
@@ -2896,7 +2939,7 @@ function fmtSize(n){
       var ne2 = el("div", "note err"); ne2.appendChild(el("span", null, ACC[a].label + ": " + errorText(data.partErrors[a], a)));
       ne2.appendChild(btn("다시 시도", "", function(){ load(true); })); notice.appendChild(ne2);
     });
-    if (data.more){
+    if (data.more && !feed){
       var mn = el("div", "note");
       mn.appendChild(el("span", null, state.q ? "결과가 많아 최근 것부터 일부만 보여 줘요." : "메일이 많아 최근 것부터 일부만 보여 줘요."));
       mn.appendChild(btn("더 불러오기", "primary", function(){ var k = keyOf(state.account); moreLv[k] = (moreLv[k] || 1) + 1; load(true); }));
@@ -2923,12 +2966,17 @@ function fmtSize(n){
         return true;
       });
       if (!shown.length){
-        var label = {today:"오늘", yesterday:"어제", week:"이번 주", month:"최근 한 달"}[state.range];
+        var label = {all:"최근 " + (FEED_DAYS * (moreLv[key] || 1)) + "일 동안", today:"오늘", yesterday:"어제", week:"이번 주", month:"최근 한 달"}[state.range];
         list.appendChild(el("li", "empty", state.unreadOnly && all.length
           ? label + " 들어온 메일을 모두 읽었어요."
           : state.q ? "‘" + state.q + "’에 맞는 메일이 없어요." : isTrash ? "휴지통이 비어 있어요." : isSent ? label + " 보낸 메일이 없어요." : label + " 들어온 " + (state.cat === "all" ? "" : catOf(state.cat).label + " ") + "메일이 없어요."));
       }
+      var lastDay = "";
       shown.forEach(function(x){
+        if (dayLines){
+          var dk = dayLabel(x.dateMs);
+          if (dk !== lastDay){ lastDay = dk; var dl = el("li", "dayline", dk); dl.setAttribute("role", "presentation"); list.appendChild(dl); }
+        }
         var li = el("li");
         var row = el("div", "mrow" + (x.unread ? " unread" : "") + (picked[x.id] ? " picked" : "")); row.tabIndex = 0; row.setAttribute("role", "button");
         row.dataset.id = x.id;
@@ -2949,7 +2997,7 @@ function fmtSize(n){
         if (x.unread){ var ud = el("span", "udot"); ud.title = "안 읽음"; ud.setAttribute("aria-label", "안 읽음"); t1.appendChild(ud); }
         else if (!x.sent && !x.isDraft) t1.appendChild(el("span", "rdot", "읽음"));
         if (x.starred){ var stv = el("span", "star on"); stv.innerHTML = ICON.star; stv.setAttribute("aria-label", "별표"); t1.appendChild(stv); }
-        t1.appendChild(el("span", "mtime", fmtTime(x.dateMs, wide || state.range === "month" || !!state.q || x.isDraft)));
+        t1.appendChild(el("span", "mtime", fmtTime(x.dateMs, !dayLines && (wide || state.range === "month" || !!state.q || x.isDraft))));
         mm.appendChild(t1);
         mm.appendChild(el("span", "msubj", x.subject));
         if (x.snippet) mm.appendChild(el("span", "msnip", x.snippet));
@@ -2967,6 +3015,21 @@ function fmtSize(n){
         if (canDelete(x)) attachSwipe(li, row, x);
         list.appendChild(li);
       });
+      if (feed && shown.length){
+        // 맨 아래에 닿으면 2주 더 거슬러 올라가 불러온다 (최대 1년)
+        var lv = moreLv[key] || 1, end = el("li", "feedend");
+        if (lv * FEED_DAYS >= 365) end.textContent = "최근 1년 메일을 모두 보여 줬어요. 더 오래된 메일은 검색해 주세요.";
+        else if (data.loading) end.textContent = "이전 메일을 불러오는 중…";
+        else {
+          end.appendChild(btn("이전 메일 더 보기", "", feedMore));
+          if (window.IntersectionObserver){
+            // 목록이 화면보다 길어서 실제로 내려 본 경우에만 저절로 불러온다 (짧은 목록에서 연달아 불러오지 않게)
+            var io = new IntersectionObserver(function(es){ if (es[0].isIntersecting && scrolledFeed(end)){ io.disconnect(); feedMore(); } }, {rootMargin: "200px"});
+            setTimeout(function(){ if (end.isConnected) io.observe(end); }, 300);
+          }
+        }
+        list.appendChild(end);
+      }
     }
 
     // 오른쪽 읽기 창 (바뀐 것이 있을 때만 다시 그린다)
@@ -3543,7 +3606,7 @@ function fmtSize(n){
     return h;
   }
   function openFromToast(acc, x){
-    state.account = acc; state.box = "inbox"; state.range = "today"; state.cat = "all"; persist();
+    state.account = acc; state.box = "inbox"; state.range = "all"; state.cat = "all"; persist();
     render();
     if (x){ select(x); }
   }
