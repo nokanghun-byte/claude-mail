@@ -916,8 +916,10 @@ function fmtSize(n){
   // 계정 목록을 imap 서버에서 다시 읽는다 (PC 확인 창이 뜰 수 있으므로 IMAP을 쓰는 순간에만 부른다)
   function refreshImapAccounts(){
     if (!mcp) return Promise.reject({code: "server_not_connected"});
-    return mcp.callTool(HOST.imap, "imap_list_accounts", {}, {cache: false}).then(function(r){
+    return resolveHosts().then(function(){ return mcp.callTool(HOST.imap, "imap_list_accounts", {}, {cache: false}); }).then(function(r){
       var p = (r && r.payload) || {};
+      // 빈 목록이 오면(확장 프로그램이 막 다시 켜지는 중 등) 알고 있던 계정을 지우지 않는다. 계정 삭제는 따로 한다.
+      if (!(p.accounts || []).length && imapList.length) throw {code: "upstream_error", message: "empty account list"};
       setImapAccounts(p.accounts || [], true);
       imapListFresh = true;
       if (state.account !== "all" && !ACC[state.account]){ state.account = "gmail"; persist(); }
@@ -2568,7 +2570,7 @@ function fmtSize(n){
     var bs = (r && r.content) || [];
     for (var i = 0; i < bs.length; i++){ var b = bs[i] || {}; if (typeof b.data === "string" && b.mimeType) return "data:" + b.mimeType + ";base64," + b.data; }
     // 큰 그림은 이미지 칸이 아니라 파일(resource) 칸으로 받는다 (이미지 칸의 큰 그림은 중간에 빠질 수 있다)
-    for (var k = 0; k < bs.length; k++){ var rs = (bs[k] || {}).resource; if (rs && typeof rs.blob === "string" && /^image//.test(rs.mimeType || "")) return "data:" + rs.mimeType + ";base64," + rs.blob; }
+    for (var k = 0; k < bs.length; k++){ var rs = (bs[k] || {}).resource; if (rs && typeof rs.blob === "string" && /^image\//.test(rs.mimeType || "")) return "data:" + rs.mimeType + ";base64," + rs.blob; }
     return "";
   }
   function isInlinePart(a, m){
