@@ -25,6 +25,50 @@ s = s.replace(sentList, '      "Sent Messages",\n      "보낸메일함",\n     
 const listFn = "  getAllAccounts() {\n    return Array.from(this.accounts";
 if (!s.includes(listFn)) throw new Error("getAllAccounts를 찾지 못했습니다");
 s = s.replace(listFn, "  getAllAccounts() {\n    this.loadAccountsSync();\n    return Array.from(this.accounts");
+// 인코딩 표시 없이 EUC-KR 글자로 온 제목(오래된 국내 광고 메일 등)이 '�'로 깨지지 않게.
+// 카카오 등은 ENVELOPE·헤더 요청에는 이미 깨진 글자를 주지만 원문(BODY[])에는 원래 바이트가 남아 있다.
+// 그래서 목록을 다 만든 뒤, 제목·보낸 사람이 깨진 메일만 원문 앞부분(16KB)을 받아 EUC-KR로 다시 읽는다.
+const retPoints = [
+  "      return messages;\n",
+  "      return messages.sort((a, b) => b.date.getTime() - a.date.getTime());\n"
+];
+for (const rp of retPoints) {
+  if (s.split(rp).length - 1 !== 1) throw new Error("메일 목록 반환 위치를 못 찾았어요: " + rp.trim());
+  s = s.replace(rp, "      await fixBrokenSubjects(client, messages);\n" + rp);
+}
+s = s.replace("// src/utils/client-side-search.ts", `// 깨진 제목 고치기 (Claude Mail 확장 프로그램이 덧붙임)
+function rawHeaderBytes(head, name) {
+  const want = name.toLowerCase() + ":";
+  const lines = head.toString("latin1").split(/\\r?\\n(?![ \\t])/);
+  for (const l of lines) if (l.slice(0, want.length).toLowerCase() === want) return Buffer.from(l.slice(want.length).replace(/\\r?\\n[ \\t]+/g, " "), "latin1");
+  return null;
+}
+function decodeRaw(bytes) {
+  if (!bytes) return "";
+  if (!bytes.some((b) => b > 127)) return "";
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim(); } catch {}
+  try { const t = new TextDecoder("euc-kr").decode(bytes).trim(); return t.includes("\\ufffd") ? "" : t; } catch { return ""; }
+}
+async function fixBrokenSubjects(client, list) {
+  try {
+    const bad = (list || []).filter((m) => m && m.uid && (/\\ufffd/.test(m.subject || "") || /\\ufffd/.test(m.from || "")));
+    if (!bad.length) return;
+    const byUid = new Map(bad.map((m) => [m.uid, m]));
+    for await (const r of client.fetch(bad.map((m) => m.uid).join(","), { uid: true, source: { start: 0, maxLength: 16384 } }, { uid: true })) {
+      const m = byUid.get(r.uid);
+      if (!m || !r.source) continue;
+      const src = Buffer.from(r.source);
+      let end = src.indexOf("\\r\\n\\r\\n");
+      if (end < 0) end = src.indexOf("\\n\\n");
+      const head = end < 0 ? src : src.subarray(0, end);
+      if (/\\ufffd/.test(m.subject || "")) { const t = decodeRaw(rawHeaderBytes(head, "subject")); if (t) m.subject = t; }
+      if (/\\ufffd/.test(m.from || "")) { const f = decodeRaw(rawHeaderBytes(head, "from")); if (f) m.from = f; }
+    }
+  } catch {}
+}
+
+// src/utils/client-side-search.ts`);
+if (!s.includes("async function fixBrokenSubjects")) throw new Error("제목 고치기 함수를 넣지 못했어요");
 // 확장 프로그램의 임시보관 정리 도구(extras.mjs)가 쓰도록 내부 객체도 내보낸다
 if (!s.includes("\nexport { server };")) throw new Error("imap-core export 구조가 바뀌었어요");
 s = s.replace("\nexport { server };", "\nexport { server, imapService, accountManager };");
